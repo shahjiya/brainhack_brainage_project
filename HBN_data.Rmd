@@ -16,16 +16,37 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ## Reproducible brain charts HBN dataset download
 
-```{r cars}
-library(tidyverse)
+```{bash}
+#Make a data directory to hold your data files
+mkdir data
+cd data
+
+# Clone the HBN directory into the data directory
+  datalad clone https://github.com/ReproBrainChart/HBN_FreeSurfer.git \
+    -b complete-pass-0.1
+
+#Download all .tsv files
+cd HBN_FreeSurfer/freesurfer
+find . -name "*.tsv" -exec datalad get {} +
+
+#Make a directory to store all the .tsv files
+
+mkdir -p ../HBN_tsv
+
+#Make sure you are in the data directory before executing this command
+find . -name "*.tsv" -exec mv {} HBN_tsv/ \;
+
+#Make a sub-drectory for the brainmeasures tsv and the regional surface stats tv
+cd HBN_tsv
+mkdir brainmeasures_tsv
+mkdir regional_stats_tsv
+
+find . -name "*regionsurfacestats.tsv" -exec mv {} regional_stats_tsv/ \;
+find . -name "*brainmeasures.tsv" -exec mv {} brainmeasures_tsv/ \;
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+## Create directory files and working directories for your data to get stored 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
