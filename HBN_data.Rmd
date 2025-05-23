@@ -33,20 +33,53 @@ find . -name "*.tsv" -exec datalad get {} +
 
 mkdir -p ../HBN_tsv
 
-#Make sure you are in the data directory before executing this command
-find . -name "*.tsv" -exec mv {} HBN_tsv/ \;
-
 #Make a sub-drectory for the brainmeasures tsv and the regional surface stats tv
 cd HBN_tsv
 mkdir brainmeasures_tsv
-mkdir regional_stats_tsv
+mkdir regionsurfacestats_tsv
 
-find . -name "*regionsurfacestats.tsv" -exec mv {} regional_stats_tsv/ \;
-find . -name "*brainmeasures.tsv" -exec mv {} brainmeasures_tsv/ \;
+find . -name "*regionsurfacestats.tsv" -exec cp {} HBN_tsv/regional_stats_tsv/ \;
+find . -name "*brainmeasures.tsv" -exec cp {} HBN_tsv/brainmeasures_tsv/ \;
 ```
 
 
 ## Create directory files and working directories for your data to get stored 
 
+```{r}
+library(tidyverse)
+
+# Set the directory containing the .tsv files
+brainmeasures_tsv_dir <- "/Users/jiyashah/Data/HBN_tsv/brainmeasures_tsv"
+
+# List all .tsv files
+brainmeasures_tsv_files <- list.files(brainmeasures_tsv_dir, pattern = "\\.tsv$", full.names = TRUE)
+
+# Read and combine all files without storing the filename
+combined_df <- map_df(brainmeasures_tsv_files, ~ read_tsv(.x, show_col_types = FALSE))
+
+# Preview combined data
+print(combined_df)
+
+# Create a new csv file with the combined data 
+write_csv(combined_df, "/Users/jiyashah/Data/HBN_tsv/combined_brainmeasures.csv")
+
+```
+
+```{r}
+# Set the directory containing the .tsv files
+regionsurfacestats_tsv_dir <- "/Users/jiyashah/Data/HBN_tsv/regionsurfacestats_tsv"
+
+# List all .tsv files
+regionsurfacestats_tsv_files <- list.files(regionsurfacestats_tsv_dir, pattern = "\\.tsv$", full.names = TRUE)
+
+# Read and combine all files without storing the filename
+regions_combined_df <- map_df(regionsurfacestats_tsv_files, ~ read_tsv(.x, show_col_types = FALSE))
+
+# Preview combined data
+print(regions_combined_df)
+
+# Create a new csv file with the combined data 
+write_csv(regions_combined_df, "/Users/jiyashah/Data/HBN_tsv/combined_regionsurfacestats.csv")
+```
 
 
