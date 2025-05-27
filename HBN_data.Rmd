@@ -81,5 +81,46 @@ print(regions_combined_df)
 # Create a new csv file with the combined data 
 write_csv(regions_combined_df, "/Users/jiyashah/Data/HBN_tsv/combined_regionsurfacestats.csv")
 ```
+## reshape regional data
+```{r}
+atlas_list <- unique(regions_combined_df$atlas)
 
+print(atlas_list)
+
+```
+```{r}
+reshape_atlas_wide <- function(df, atlas_name) {
+  df %>%
+    filter(atlas == atlas_name, !is.na(StructName), StructName != "") %>%
+    select(subject_id, session_id, hemisphere, StructName,
+           NumVert, SurfArea, GrayVol, ThickAvg, ThickStd, MeanCurv,
+           GausCurv, FoldInd, CurvInd, Index, SegId,
+           Mean_wgpct, StdDev_wgpct, Min_wgpct, Max_wgpct, Range_wgpct, SNR_wgpct,
+           Mean_piallgi, StdDev_piallgi, Min_piallgi, Max_piallgi, Range_piallgi) %>%
+    
+    # Reshape
+    pivot_longer(cols = -c(subject_id, session_id, hemisphere, StructName),
+                 names_to = "metric", values_to = "value") %>%
+    mutate(column_name = paste0(hemisphere, "_", StructName, "_", metric)) %>%
+    select(subject_id, session_id, column_name, value) %>%
+    group_by(subject_id, session_id, column_name) %>%
+    summarise(value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = column_name, values_from = value)
+}
+
+
+```
+
+```{r}
+# Directory to save reshaped CSVs
+output_dir <- "/Users/jiyashah/Data/"
+dir.create(output_dir, showWarnings = FALSE)
+
+walk(atlas_list, function(atlas_name) {
+  message("Processing: ", atlas_name)
+  reshaped_df <- reshape_atlas_wide(regions_combined_df, atlas_name)
+  write_csv(reshaped_df, file.path(output_dir, paste0("atlas_", atlas_name, "_wide.csv")))
+})
+
+```
 
