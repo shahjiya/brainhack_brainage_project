@@ -18,9 +18,12 @@ Welcome to the brainhack_brainage_project! This project is focused on estimating
 4. Visualization tools for interpreting brain age gaps
 
 **Prerequisites**
-> R 
-> FreeSurfer Outputs 
-> Demograhic Files 
+> R
+
+> FreeSurfer Outputs
+
+> Demograhic Files
+
 > BrainAge Templates
 
 **Libraries Needed** 
