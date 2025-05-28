@@ -1,0 +1,35 @@
+---
+title: "Kauffman_brainage"
+output: html_document
+date: "2025-05-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is a script to use the kauffman brainage calcualtor: https://github.com/tobias-kaufmann/brainage/tree/master
+
+```{bash}
+git clone https://github.com/tobias-kaufmann/brainage.git
+
+```
+
+##Load the template file
+
+```{r cars}
+feature_names <- read_csv("brainage/feature-names.csv")
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
