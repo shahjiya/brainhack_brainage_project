@@ -38,8 +38,8 @@ tree Developmental_BrainAGE
 
 ```{bash}
 # Move template and demographic files into main project folder
-mv ~/Downloads/Developmental_BrainAGE_template.xlsx Developmental_BrainAGE/
-mv ~/Downloads/demographics.tsv Developmental_BrainAGE/
+mv ~/Downloads/template_brainage.xlsx Developmental_BrainAGE/
+mv /path/to/your/demographic_file.tsv Developmental_BrainAGE/ #Replace /path/to/your/demographic_file.tsv with your actual file path
 
 # Move freesurfer files into subfolder
 mv ~/Downloads/lh.Schaefer2018_1000Parcels.*.tsv Developmental_BrainAGE/Freesurfer_Outputs/
