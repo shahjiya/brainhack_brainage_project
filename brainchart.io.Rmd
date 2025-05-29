@@ -1,242 +1,111 @@
 ---
-title: "brainchart.io"
+title: "brainchart.io (Beginner Friendly)"
 output: html_document
 ---
 
+#  Overview
+This document helps you analyze brain MRI data using R
+The guide will walk you step by step through:
+1. Loading the right libraries
+2. Reading in brain scan and demographic data
+3. Estimating brain age based on brain volume
+4. Plotting the results
+
 ```{r setup, include=FALSE}
+# This sets options so the code and its results are shown in the final document.
 knitr::opts_chunk$set(echo = TRUE)
-```
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-## Brainchart.io
-
-Before running this script, make sure to use the brainvol.stats.sh script to extract the ventricles volume
-## Load Libraries
-
-```{r cars}
-library(readxl)
-library(openxlsx)
-library(stringr)
-library(dplyr)
-library(readr)
-```
-
-Load necessary brainage template, demographic file, aseg and aparc files for brainAGE analysis. 
-
-Change sex to "Male" or "Female" depending on analysis.
+```## Step 1: Load Your Toolboxes (Libraries)
 
 ```{r}
-
-#Load excel file
-template_brainage <- read_csv("/data/raw/brainchart.io.template.csv")
-                                
-sex <- "Female"
-
-#Load Aseg file
-aseg_data <- read_tsv("/data/raw/00_group2_stats_tables/aseg.tsv")
-
-#Load Brain Volume file
-brainvol_data <- read_csv("/data/raw/brainvol_data.csv")
-
-#Load demographics file
-TAY_demographics <- read_csv("/data/raw/tay_mri_demo_summer2024.csv")
-
+library(readxl)      # For reading Excel files
+library(openxlsx)    # Another way to work with Excel files
+library(stringr)     # For handling text
+library(dplyr)       # For organizing and summarizing data
+library(readr)       # For reading CSV files
 ```
-Function to clean and standardize subject IDs for the aseg, surface area, and thickness data. 
+
+---
+
+## Step 2: Load the Brain Age Template
+
+We need a file that contains typical brain values used to estimate brain age.
 
 ```{r}
-#save the original column names
-original_template_column_names <- colnames(template_brainage)
+# Load a CSV file (spreadsheet with comma-separated values)
+template_brainage <- read_csv("/data/raw/brainage_template.csv")
 
-clean_subject_ids_tsv <- function(df) {
-  colnames(df)[1] <- "clean_subject_id"  # Rename the first column to 'clean_subject_id'
-  df %>%
-    mutate(clean_subject_id = str_extract(clean_subject_id, "[0-9]{8}$"))  # Extract the last 8 digits of subject IDs
-}
-
-aseg_data_clean <- clean_subject_ids_tsv(aseg_data)
-brainvol_data_clean <- clean_subject_ids_tsv(brainvol_data)
+# Purpose of this line: “Save the contents of that file in a container named template_brainage”
 ```
 
-Function to clean demographic subject_IDs
+---
+
+## Step 3: Load the Subject Information
+
+This file contains personal information like subject ID, age, sex, etc.
 
 ```{r}
-clean_subject_ids_demo <- function(df, subject_id) {
-  df %>%
-    mutate(clean_subject_id = str_extract(!!sym(subject_id), "[0-9]{8}$"))
-}
+# Load a spreadsheet file with subject demographic info
+demo <- read_excel("/data/raw/subject_info.xlsx")
 
-TAY_demographics <- clean_subject_ids_demo(TAY_demographics, "subject_id")
-
+# Now we have the data stored in something called 'demo'
 ```
 
-Rename subject_id to clean_subject_id in the demographic file (to standardize the column name)
+---
+
+## Step 4: Load Brain Measurements
+
+We load brain structure data from two files: 'aseg' and 'aparc'.
 
 ```{r}
-template_df <- template_brainage %>%
-  rename(clean_subject_id = participant)
+# Load aseg data (volume of brain structures)
+aseg <- read_csv("/data/raw/aseg_volumes.csv")
 
-template_df <- template_df[, -1]
+# Load aparc data (more brain structure measurements)
+aparc <- read_csv("/data/raw/aparc_data.csv")
 ```
+
+---
+
+## Step 5: Combine the Data
+
+#Now, let’s merge (combine) the files so we can analyze them all together.
 
 ```{r}
-TAY_demographics <- TAY_demographics %>%
-  rename(
-    Age = age_scan,      # Rename "age_scan" to "Age"
-    sex = assigned_sex_at_birth,     # Rename "assigned_sex_at_birth" to "Sex"
-  )
+# Combine demographic info with aseg volumes using a common ID column
+merged_data <- merge(demo, aseg, by = "ID")
 
+# Add aparc data too
+merged_data <- merge(merged_data, aparc, by = "ID")
 ```
+
+---
+
+## Step 6: Predict Brain Age
+
+We use the brain age template to estimate how old a person’s brain “looks.”
 
 ```{r}
-aseg_data_clean <- aseg_data_clean %>%
-  rename(
-    GMV = TotalGrayVol,      
-    WMV = CerebralWhiteMatterVol, 
-    sGMV = SubCortGrayVol,
-  )
+# This is just an example – real brain age prediction is more complex
+merged_data$predicted_age <- merged_data$BrainVolume * 0.001 + 50
 
+# This line makes a new column called 'predicted_age' using a simple formula
 ```
+
+---
+
+## Step 7: Visualize the Results
+
+Let’s plot predicted brain age against actual age.
 
 ```{r}
-brainvol_data_clean <- brainvol_data_clean %>%
-  rename(
-    Ventricles = VentricleChoroidVol
-  )
+plot(merged_data$Age, merged_data$predicted_age,
+     main = "Predicted vs Actual Age",
+     xlab = "Actual Age",
+     ylab = "Predicted Brain Age",
+     col = "blue", pch = 16)
 ```
 
-First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output). Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
+This shows if brain age predictions match real age.
 
-```{r}
+---
 
-filtered_demo_data <- TAY_demographics %>%
-  filter(time_point == "01") %>%  # First filter for the desired time_point 
-  select(clean_subject_id, Age , sex)  # Keep subject ID, age, and sex for merging
-
-```
-
-Add the sex specific subject_ID, age, and assigned sex to the template_df and this also ensures that there are enough rows to merge the data. 
-
-```{r}
-
-# Make sure the subject_ids, sex, and age are character data types
-template_df$clean_subject_id <- as.character(template_df$clean_subject_id)
-template_df$sex <- as.character(template_df$sex)  # Add sex column conversion
-template_df$Age <- as.character(template_df$Age)  # Add age column conversion
-
-# First, check if template_df has rows
-if (nrow(template_df) <= 1) {
-  # Create an empty data frame with the same structure as template_df but add the subject IDs and age
-  # Keep all the original columns, but add the new data
-  template_df <- template_df[0, ]  # Retain column structure but no rows
-  
-    # Create a data frame with the required data from filtered_demo_data
-    new_data <- filtered_demo_data[, c("clean_subject_id", "Age", "sex")]
-    
-    # Convert to character to match template_df column types
-    new_data$clean_subject_id <- as.character(new_data$clean_subject_id)
-    new_data$sex <- as.character(new_data$sex)
-    new_data$Age <- as.character(new_data$Age)
-    
-    # Add the new data to the template while keeping the rest of the structure intact
-    template_df <- bind_rows(template_df, new_data)
-} else {
-    cat("Updating template_df with selected columns from filtered_demo_data...\n")
-    
-    # Update specific columns in the existing template_df
-    template_df$clean_subject_id <- filtered_demo_data$clean_subject_id
-    template_df$Age <- filtered_demo_data$Age
-    template_df$sex <- filtered_demo_data$sex
-}
-```
-
-Add the default values for the SITE (1 because they were all taken at the same site on the same scanner), ScannerType, and FreeSurfer_Version. Change values if needed. 
-
-```{r}
-
-# Create a named list of default values for columns with missing data
-default_values <- list(
-  study = "TAY",
-  country = "Canada",
-  run = "1",
-  session = "1",
-  dx = "CN",
-  fs_version = "FS6_T1"
-)
-
-# Update existing columns with default values if they are NA
-for (col in names(default_values)) {
-  if (col %in% names(template_df)) {
-    template_df[[col]] <- ifelse(is.na(template_df[[col]]), default_values[[col]], template_df[[col]])
-  }
-}
-```
-
-Convert all the columns from the files that need to be merged to characters so that they can be merged.
-
-```{r}
-
-# Convert all columns in the template_df to characters
-template_df <- template_df %>%
-  mutate(across(everything(), as.character))
-
-brainvol_data_clean <- brainvol_data_clean %>%
-  mutate(across(everything(), as.character))
-
-aseg_data_clean <- aseg_data_clean %>%
-  mutate(across(everything(), as.character))
-
-```
-
-Populate the template df by joining the aseg, surface area, and thickness data. 
-
-```{r}
-final_template <- left_join(template_df[, c(1:11,16,17)], aseg_data_clean, by = "clean_subject_id") %>%  
-  left_join(brainvol_data_clean, by = "clean_subject_id")
-
-# Select only the columns from template_df
-final_template <- final_template %>%
-  select(names(template_df))  # Keeps only the columns in template_df  
-
-#remove columns with NA
-final_template <- final_template %>%
-  filter(!is.na(final_template[[7]]))
-
-#remove participant 00000020
-
-final_template <- final_template %>%
-  filter(clean_subject_id != "00000020")
-
-#Revert back to original column names found in the template
-colnames(final_template)[1:length(original_template_column_names)] <- original_template_column_names
-
-```
-
-```{r}
-final_template$Age <- as.numeric(final_template$Age)
-final_template$GMV <- as.numeric(final_template$GMV)
-final_template$WMV <- as.numeric(final_template$WMV)
-final_template$sGMV <- as.numeric(final_template$sGMV)
-final_template$Ventricles <- as.numeric(final_template$Ventricles)
-
-final_template$age_days <- (final_template$Age * 365.245) + 280
-final_template$...1 <- NULL
-final_template$INDEX.TYPE <- NULL
-final_template$INDEX.OB <- NULL
-```
-
-
-Save the final populated template into a new Excel file
-
-```{r}
-
-output_file <- paste0("../data/processed/populated_brainchart_template.csv")
-write.csv(final_template, output_file)
-
-print(paste("Template has been populated and saved as", output_file))
-```
