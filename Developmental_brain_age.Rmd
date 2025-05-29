@@ -3,13 +3,13 @@ title: "Developmental_brain_age"
 output: html_notebook
 date: 2024-10-17
 ---
-#Overview
+# Overview
 This is a script to create the Developmental BrainAge template (https://centilebrain.org/#/brainAGE) using freesurfer outputs.
 **Please follow each step and modify the paths and options as needed.**
 
 ---
 
-#Load the necessary libraries
+# Load the necessary libraries
 
 ```{r}
 library(readxl)
@@ -19,13 +19,13 @@ library(dplyr)
 library(readr)
 ```
 ```{bash}
-#Create a directory to store files for BrainAGE calculation. 
+# Create a directory to store files for BrainAGE calculation. 
 
 # Create the main project directory Developmental_BrainAGE folder
 mkdir -p Developmental_BrainAGEBrainAGE
 cd /path/to/your/Developmental_BrainAGE
 
-#make folders within Developmental_BrainAGE_BrainAGE folder
+# Make folders within Developmental_BrainAGE_BrainAGE folder
 mkdir -p Developmental_BrainAGE/Freesurfer_Outputs
 mkdir -p Developmental_BrainAGE/output
 
@@ -60,11 +60,11 @@ dir.create("Freesurfer_Outputs", recursive = TRUE, showWarnings = FALSE)
 dir.create("output", recursive = TRUE, showWarnings = FALSE)
 dir.create("../data/processed", recursive = TRUE, showWarnings = FALSE)
 
-#Load Developmental BrainAGE template and demographic data
+# Load Developmental BrainAGE template and demographic data
 template_brainage <- read_excel("Developmental_BrainAGE_template.xlsx")
 demographics_df <- read_tsv("demographics.tsv")
 
-#Load parcellation files (update path if needed)
+# Load parcellation files (update path if needed)
 lh_thick <- read_tsv("Freesurfer_Outputs/lh.Schaefer2018_400Parcels.thickness.tsv")
 lh_surf <- read_tsv("Freesurfer_Outputs/lh.Schaefer2018_400Parcels.surfacearea.tsv")
 rh_thick <- read_tsv("Freesurfer_Outputs/rh.Schaefer2018_400Parcels.thickness.tsv")
@@ -75,16 +75,16 @@ demographic_df <- read_tsv("demographics.tsv")
 
 ```
 
-#Clean column names to match the Centile BrainAGE template.
-#1. Saves original column names for reference
-#2. Removes underscores from column names
-#3. Removes first n characters. The length of the columns are checked because some column names have fewer characters and thus if they are removed, it will result in empty column headers. 
+# Clean column names to match the Centile BrainAGE template.
+# 1. Saves original column names for reference
+# 2. Removes underscores from column names
+# 3. Removes first n characters. The length of the columns are checked because some column names have fewer characters and thus if they are removed, it will result in empty column headers. 
 
 ```{r}
-#Save the original column names for comparison with the template
+# Save the original column names for comparison with the template
 original_template_column_names <- colnames(template_brainage)
 
-#Function to clean columns
+# Function to clean columns
 clean_columns <- function(df, remove_char_count) {
   if (is.data.frame(df) && ncol(df) > 0) {
     colnames(df) <- str_replace_all(colnames(df), "_", "")  # Remove underscores
@@ -99,14 +99,14 @@ clean_columns <- function(df, remove_char_count) {
    
 ```
 
-#Apply cleaning function
+# Apply cleaning function
 ```{r}
 lh_thickness_df <- clean_columns(lh_thick, 11)  
 lh_area_df <- clean_columns(lh_surf, 11)  
 rh_thickness_df <- clean_columns(rh_thick, 11)  
 rh_area_df <- clean_columns(rh_surf, 11)  
 
-#Different number of characters for the template
+# Different number of characters for the template
 
 template_df <- clean_columns(template_brainage, 10)
 ```
@@ -119,7 +119,7 @@ colnames(rh_thickness_df) <- str_replace_all(colnames(rh_thickness_df), "thickne
 
 ```
 
-#Function to clean and standardize subject IDs for the thickness and surface area data
+# Function to clean and standardize subject IDs for the thickness and surface area data
 
 ```{r}
 clean_subject_ids_tsv <- function(df) {
@@ -129,7 +129,7 @@ clean_subject_ids_tsv <- function(df) {
 }
 ```
 
-#Apply the subject_ID cleaning function to thickness and surface area files
+# Apply the subject_ID cleaning function to thickness and surface area files
 
 ```{r}
 lh_thick_clean <- clean_subject_ids_tsv(lh_thickness_df)
@@ -138,7 +138,7 @@ rh_thick_clean <- clean_subject_ids_tsv(rh_thickness_df)
 rh_surf_clean <- clean_subject_ids_tsv(rh_area_df)
 ```
 
-#Define a function to clean demographic subject_ids
+# Define a function to clean demographic subject_ids
 
 ```{r}
 clean_subject_ids_demo <- function(df, subject_id) {
@@ -147,20 +147,20 @@ clean_subject_ids_demo <- function(df, subject_id) {
 }
 ```
 
-#Apply the cleaning function to the demographic subject_ids
+# Apply the cleaning function to the demographic subject_ids
 
 ```{r}
 demographics_df<- clean_subject_ids_demo(demographic_df, "subject_id")
 ```
 
-#Rename subject_id to clean_subject_id in the demographic file (to standardize the column name)
+# Rename subject_id to clean_subject_id in the demographic file (to standardize the column name)
 
 ```{r}
 template_df <- template_df %>%
   rename(clean_subject_id = subjectid)
 ```
 
-#Filter the dataset to keep only baseline scans (time_point == "01") to avoid duplicate subject_IDs in the final output. 
+# Filter the dataset to keep only baseline scans (time_point == "01") to avoid duplicate subject_IDs in the final output. 
 #Then filter for sex and create a dataframe with just subject Id, age, and sex. 
 
 ```{r}
@@ -172,7 +172,7 @@ gendered_data <- demographic_df %>%
 
 ```
 
-#Filter thickness and area data for female subject IDs
+# Filter thickness and area data for female subject IDs
 # Consider creating a function to filter subject_IDs
 
 ```{r}
@@ -189,7 +189,7 @@ gendered_rh_area_data <- rh_surf_clean %>%
   filter(clean_subject_id %in% gendered_data$clean_subject_id)
 ```
 
-#Ensure that all columns remain intact while adding the female data
+# Ensure that all columns remain intact while adding the female data
 
 ```{r}
 
@@ -218,14 +218,14 @@ if (nrow(template_df) == 0) {
 ```
 
 
-#Check if subject IDs from both dataframes match
+# Check if subject IDs from both dataframes match
 
 ```{r}
 common_ids <- intersect(template_df$clean_subject_id, gendered_lh_thickness_data$clean_subject_id)
 print(paste("Number of matching subject IDs:", length(common_ids)))
 ```
 
-#Make all of the logical variables into characters
+# Make all of the logical variables into characters
 
 ```{r}
 
@@ -249,7 +249,7 @@ gendered_rh_area_data <- gendered_rh_area_data %>%
   mutate(across(everything(), as.character))
 ```
 
-#Populate the template with female subject data and only keep the column names that are in the template. 
+# Populate the template with female subject data and only keep the column names that are in the template. 
 #Remove any rows with NA, the calculator will not work if there are any NA values. Then revert back to the original column names. 
 #Ensure that all the relevant data is properly merged.
 
@@ -263,15 +263,15 @@ final_template <- left_join(template_df[, c(1, 2)], gendered_lh_thickness_data, 
 final_template <- final_template %>%
   select(names(template_df))  # Keeps only the columns in templa5te_df  
 
-#remove columns with NA
+# Remove columns with NA
 final_template <- final_template %>%
   filter(!is.na(final_template[[3]]))
 
-#Revert back to original column names found in the template
+# Revert back to original column names found in the template
 colnames(final_template)[1:length(original_template_column_names)] <- original_template_column_names
 ```
 
-#Output a .csv file that contains the subject ID and the age so that they can be used for the analysis after
+# Output a .csv file that contains the subject ID and the age so that they can be used for the analysis after
 
 ```{r}
 output_csv_file <- paste0("../data/processed/", tolower(sex), "_subID_developmental_template.csv")
@@ -279,7 +279,7 @@ write.csv(final_template, file = output_csv_file, row.names = FALSE)
 ```
 
 
-#Change all the data types to numeric and remove the first column of the subject ids because that was not in the original template. 
+# Change all the data types to numeric and remove the first column of the subject ids because that was not in the original template. 
 #Make sure all the data types are numeric because the calculator will not work if they are different data types. 
 
 ```{r}
@@ -292,7 +292,7 @@ numeric_data <- final_template[, -1] %>%
 
 ```
 
-#Save the final populated template into a new Excel file
+# Save the final populated template into a new Excel file
 
 ```{r}
 
