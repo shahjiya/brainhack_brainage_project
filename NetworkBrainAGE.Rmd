@@ -1,0 +1,305 @@
+---
+title: "Network_brain_age"
+output: html_notebook
+date: 2024-10-18
+---
+
+# Overview
+
+This is a script to create and populate the Network BrainAge template (https://centilebrain.org/#/brainAGE) using freesurfer outputs.
+
+Files and column names have been adapted to align with RBC conventions.
+
+```{r}
+## Load Required Libraries
+library(readxl)
+library(openxlsx)
+library(stringr)
+library(dplyr)
+library(readr)
+library(curl)
+```
+
+```{bash}
+#Create directory to store files for BrainAGE calculation
+
+# Create the main project directory Network_BrainAGE folder
+mkdir -p Network_BrainAGE
+cd /path/to/your/Network_BrainAGE
+
+#make folders within Network_BrainAGE folder
+mkdir -p Network_BrainAGE/Freesurfer_Outputs
+mkdir -p Network_BrainAGE/output
+
+# Confirm the structure
+tree Network_BrainAGE
+
+#Download the Network BrainAGE template, project demographic data, and freesurfer outputs
+
+# Move template and demographic files into main project folder
+mv ~/Downloads/Network_BrainAGE_template.xlsx Network_BrainAGE/
+mv ~/Downloads/demographics.tsv Network_BrainAGE/
+
+# Move freesurfer files into subfolder
+mv ~/Downloads/lh.Schaefer2018_1000Parcels.*.tsv Network_BrainAGE/Freesurfer_Outputs/
+mv ~/Downloads/rh.Schaefer2018_1000Parcels.*.tsv Network_BrainAGE/Freesurfer_Outputs/
+```
+
+Load Files
+# Change sex to "Male" or "Female" depending on analysis.
+
+```{r}
+# Set working directory to main project folder before running this script
+setwd("Network_BrainAGE")
+
+#Load Network BrainAGE template and demographic data
+template_brainage <- read_excel("Network_BrainAGE_template.xlsx")
+demographics_df <- read_tsv("demographics.tsv")
+
+# Filter for Sex ('Male' or 'Female')
+sex <- "Male"
+
+# Load Schaefer 1000-parcel thickness and surface area data
+
+lh_thick <- read_tsv("Freesurfer_Outputs/lh.Schaefer2018_1000Parcels.thickness.tsv")
+lh_surf  <- read_tsv("Freesurfer_Outputs/lh.Schaefer2018_1000Parcels.surfacearea.tsv")
+rh_thick <- read_tsv("Freesurfer_Outputs/rh.Schaefer2018_1000Parcels.thickness.tsv")
+rh_surf  <- read_tsv("Freesurfer_Outputs/rh.Schaefer2018_1000Parcels.surfacearea.tsv")
+```
+
+# Clean and Standardize subject IDs
+
+```{r}
+# Subject IDs in cortical metrics data
+clean_subject_ids_tsv <- function(df) {
+  colnames(df)[1] <- "clean_subject_id"  # Rename the first column to 'clean_subject_id'
+  df %>%
+    mutate(clean_subject_id = str_extract(clean_subject_id, "[0-9]{8}$"))  # Extract the last 8 digits of subject IDs
+}
+
+#Function for demographics subject IDs
+clean_subject_ids_demographics <- function(df, id_column) {
+  df %>%
+    mutate(clean_subject_id = str_extract(!!sym(id_column), "[0-9]{8}$"))
+}
+```
+
+# Apply the subject_ID cleaning function to thickness and surface area files
+
+```{r}
+#Cortical metrics data
+lh_thick_clean <- clean_subject_ids_tsv(lh_thick)
+lh_surf_clean <- clean_subject_ids_tsv(lh_surf)
+rh_thick_clean <- clean_subject_ids_tsv(rh_thick)
+rh_surf_clean <- clean_subject_ids_tsv(rh_surf)
+
+#demographics data
+demographics_df <- clean_subject_ids_demographics(demographics_df, "participant_id")  # Adjust column name as per data
+```
+
+# Standardize the column name by renaming template subject ID column
+
+```{r}
+#Rename templates subject ID column for consistency
+template_df <- template_brainage %>%
+  rename(clean_subject_id = SubjectID)
+```
+
+# 1. Filters for time point 
+# This also prevents duplicate subject_IDs in the final output
+
+# 2. Filters for sex and then creates a dataframe with subject ID, age, and sex. 
+
+```{r}
+
+gendered_data <- demographics_df %>%
+  filter(wave == "1") %>%  # Filter for the desired wave (baseline)
+  filter(sex == sex) %>%  # Filter for sex
+  select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
+
+```
+
+# Filter cortical data for female subject IDs 
+
+```{r}
+
+filter_subjects <- function(metric_df, subject_ids) {
+  metric_df %>%
+    filter(clean_subject_id %in% subject_ids)
+}
+
+gendered_lh_thickness_data <- lh_thick_clean %>%
+  filter(clean_subject_id %in% gendered_data$clean_subject_id)
+
+gendered_lh_area_data <- lh_surf_clean %>%
+  filter(clean_subject_id %in% gendered_data$clean_subject_id)
+
+gendered_rh_thickness_data <- rh_thick_clean %>%
+  filter(clean_subject_id %in% gendered_data$clean_subject_id)
+
+gendered_rh_area_data <- rh_surf_clean %>%
+  filter(clean_subject_id %in% gendered_data$clean_subject_id)
+```
+
+# Add the female subject_ID, age, and sex to the template_df
+## This also ensures that there are enough rows to merge the data 
+
+```{r}
+
+# Make sure the subject_ids, sex, and age are character data types to ensure merge compatibility
+template_df$clean_subject_id <- as.character(template_df$clean_subject_id)
+template_df$sex <- as.character(template_df$sex)  # Add sex column conversion
+template_df$age <- as.character(template_df$age)   # Add age column conversion
+
+# Check if template_df has rows
+if (nrow(template_df) == 0) {
+  # Create an empty data frame with the same structure as template_df but add the subject IDs and age
+  # Keep all the original columns, but add the new data
+  template_df <- template_df[0, ]  # Retain column structure but no rows
+  
+  # Now create a new data frame that only updates clean_subject_id and AGE
+  new_data <- data.frame(clean_subject_id =gendered_data$clean_subject_id,
+                         age = gendered_data$age,
+                         sex = gendered_data$sex,
+                         stringsAsFactors = FALSE)
+  
+  # Make them the same data type
+  new_data$clean_subject_id <- as.character(new_data$clean_subject_id)
+  new_data$sex <- as.character(new_data$sex)
+  new_data$age <- as.character(new_data$age)
+  
+  # Bind the new data to the empty template, ensuring columns remain intact
+  template_df <- bind_rows(template_df, new_data)
+} else {
+  
+  # If template_df already has rows, just update clean_subject_id and AGE columns
+  template_df$clean_subject_id <- gendered_data$clean_subject_id
+  template_df$AGE <- gendered_data$age
+}
+
+```
+
+# Add the default values for the SITE (1 because they were all taken at the same site on the same scanner), ScannerType, and FreeSurfer_Version. Change values if needed. 
+
+```{r}
+
+# Create a named list of default values for columns with missing data
+default_values <- list(
+  SITE = "1",
+  ScannerType = "3",
+  FreeSurfer_Version = "7.0"
+)
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_df)) {
+    template_df[[col]] <- ifelse(is.na(template_df[[col]]), default_values[[col]], template_df[[col]])
+  }
+}
+
+```
+
+
+#Confirm Subject ID overlap
+
+```{r}
+# Check if subject IDs from both dataframes match
+common_ids <- intersect(template_df$clean_subject_id, gendered_lh_thickness_data$clean_subject_id)
+print(paste("Number of matching subject IDs:", length(common_ids)))
+```
+
+Convert logical columns to character
+
+```{r}
+
+# Convert all columns in the template_df to characters
+template_df <- template_df %>%
+  mutate(across(everything(), as.character))
+
+gendered_data <- gendered_data %>%
+  mutate(across(everything(), as.character))
+
+gendered_lh_thickness_data <- gendered_lh_thickness_data %>%
+  mutate(across(everything(), as.character))
+
+gendered_lh_area_data <- gendered_lh_area_data %>%
+  mutate(across(everything(), as.character))
+
+gendered_rh_thickness_data <- gendered_rh_thickness_data %>%
+  mutate(across(everything(), as.character))
+
+gendered_rh_area_data <- gendered_rh_area_data %>%
+  mutate(across(everything(), as.character))
+```
+
+# Merge Data into Final Template 
+1. Populate the template with female subject data and only keep the column names that are in the template.
+2. Remove any rows with NA, the calculator will not work if there are any NA values. 
+3. Then revert back to the original column names. 
+4. Ensure that all the relevant data is properly merged.
+
+```{r}
+final_template <- left_join(template_df[, c(1, 2, 3, 4, 5, 6)], gendered_lh_thickness_data, by = "clean_subject_id") %>%  
+  left_join(gendered_lh_area_data, by = "clean_subject_id") %>%
+  left_join(gendered_rh_thickness_data, by = "clean_subject_id") %>%
+  left_join(gendered_rh_area_data, by = "clean_subject_id")
+
+# Select only the columns from template_df
+final_template <- final_template %>%
+  select(names(template_df))  # Keeps only the columns in template_df  
+
+#remove columns with NA
+final_template <- final_template %>%
+  filter(!is.na(final_template[[7]]))
+
+```
+
+#Convert Data to Numeric and remove first subject ID column (not in the original template)
+## Make sure all the data types are numeric because the calculator will not work if they are different data types. 
+
+```{r}
+
+# Convert all other rows and columns to numeric
+numeric_data <- final_template %>%
+  mutate_at(vars(-4), ~ as.numeric(as.character(.)))
+
+```
+
+The Network brainAGE only accepts 150 participants at a time so multiple files need to be created to only have 150 participants per file.
+# Output files in parts and then put them through the brain age calculator. 
+
+```{r}
+##Exporting data in chunkcs of 150 participants
+
+participants_per_file <- 150
+
+# Calculate how many files needed
+num_files <- ceiling(nrow(numeric_data) / participants_per_file)
+
+# Loop through the dataframe, slice into 150 participant chunks, and save each chunk
+for (i in 1:num_files) {
+  # Slice rows for participants
+  start_row <- (i-1)*participants_per_file + 1
+  end_row <- min(i*participants_per_file, nrow(numeric_data)) 
+  
+  chunked_participants <- numeric_data %>%
+    slice(start_row:end_row)
+  
+  # Create file name for each chunk
+  file_name <- paste0("output/", tolower(sex), "_network_template_part_", i, ".xlsx")
+  
+  # Write the chunk to an Excel file, keeping the header row
+  write.xlsx(chunked_participants, file_name)
+  
+  # Print a message for each file creation
+  print(paste("Saved file:", file_name))
+}
+
+
+```
+
+Relevant references:
+- Franke, K., & Gaser, C. (2012). Longitudinal changes in individual BrainAGE in healthy aging, mild cognitive impairment, and Alzheimer's disease. *GeroPsych: The Journal of Gerontopsychology and Geriatric Psychiatry*, 25(4), 235–245. [https://doi.org/10.1024/1662-9647/a000074](https://doi.org/10.1024/1662-9647/a000074)
+- Bethlehem, R. A. I., et al. (2022). Brain charts for the human lifespan. *Nature*, 604(7906), 525–533. [https://doi.org/10.1038/s41586-022-04554-y](https://doi.org/10.1038/s41586-022-04554-y)
+
+```{r}
