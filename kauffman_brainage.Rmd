@@ -4,8 +4,14 @@ output: html_document
 date: "2025-05-28"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+## Load necessary libraries
+
+```{r}
+library(readxl)
+library(openxlsx)
+library(stringr)
+library(dplyr)
+library(readr)
 ```
 
 ## R Markdown
@@ -17,19 +23,23 @@ git clone https://github.com/tobias-kaufmann/brainage.git
 
 ```
 
-##Load the template file
+## Load all the necessary files + change feature names file to the right format
 
 ```{r cars}
 feature_names <- read_csv("brainage/feature-names.csv")
+combined_brainmeasures <- read_csv("~/Data/HBN_tsv/combined_brainmeasures.csv")
+glassr_output <- read_csv("~/Data/glasser_wide.csv")
+demographics <- read_csv("~/Data/HBN_BIDS/study-HBN_desc-participants.tsv")
 
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
+## Rename subject IDs
 
 ```{r pressure, echo=FALSE}
-plot(pressure)
+colnames(glassr_output) <- colnames(glassr_output) %>%
+  str_replace_all("ThickAvg", "thickness") %>%
+  str_replace_all("SurfArea", "area") %>%
+  str_replace_all("GrayVol", "volume")
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
