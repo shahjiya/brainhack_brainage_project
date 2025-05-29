@@ -7,13 +7,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+#Overview
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+This R Markdown script processes neuroimaging outputs and populates CentileBrain templates (https://centilebrain.org/#/model) based on freesurfer data.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Files and columns are standardized for RBC conventions..
+
 
 ```{r cars}
+# Load Required Packages
+
 library(readxl)
 library(openxlsx)
 library(stringr)
@@ -21,89 +24,139 @@ library(dplyr)
 library(readr)
 ```
 
+```{bash}
+# Create main project directory (run once)
+mkdir -p centilebrain_BrainAGE
+
+# Navigate into your project folder (adjust path)
+cd /path/to/your/centilebrain_BrainAGE
+
+# Create subfolders
+mkdir -p Cortical_Measures
+mkdir -p output
+mkdir -p templates
+
+# Move files to correct folders (update filenames as needed)
+
+# Move the main template, demographics, aseg files into main folder
+mv ~/Downloads/<centilebrain_template_file.xlsx> ./ 
+mv ~/Downloads/<demographics_file.tsv> ./
+mv ~/Downloads/<aseg.tsv> ./
+
+# Move subcortical and cortical template excels into templates folder
+mv ~/Downloads/subcortical-volume-female.xlsx templates/
+mv ~/Downloads/subcortical-volume-male.xlsx templates/
+mv ~/Downloads/cortical-thickness-female.xlsx templates/
+mv ~/Downloads/cortical-thickness-male.xlsx templates/
+mv ~/Downloads/surface-area-female.xlsx templates/
+mv ~/Downloads/surface-area-male.xlsx templates/
+
+# Move thickness and surface area CSVs into Cortical_Measures folder
+mv ~/Downloads/CorticalMeasuresENIGMA_ThickAvg.csv Cortical_Measures/
+mv ~/Downloads/CorticalMeasuresENIGMA_SurfAvg.csv Cortical_Measures/
+
+# Confirm structure
+tree
+```
+
 ## Import the necessary files
 
 This is for all of the centile brain centile scores. 
 
 ```{r pressure, echo=FALSE}
-#Load excel file
-template_subvol_fem <- read_excel("../../data/raw/subcortical-volume-female.xlsx")
+#Load template excel file
+template_subvol_fem <- read_excel("templates/subcortical-volume-female.xlsx")
+template_subvol_male <- read_excel("templates/subcortical-volume-male.xlsx")
+template_thick_fem <- read_excel("templates/cortical-thickness-female.xlsx")
+template_thick_male <- read_excel("templates/cortical-thickness-male.xlsx")
+template_area_fem <- read_excel("templates/surface-area-female.xlsx")
+template_area_male <- read_excel("templates/surface-area-male.xlsx")
 
-template_subvol_male <- read_excel("../../data/raw/subcortical-volume-male.xlsx")
-
-template_thick_fem <- read_excel("../../data/raw/cortical-thickness-female.xlsx")
-
-template_thick_male <- read_excel("../../data/raw/cortical-thickness-male.xlsx")
-
-template_area_fem <- read_excel("../../data/raw/surface-area-female.xlsx")
-
-template_area_male <- read_excel("../../data/raw/surface-area-male.xlsx")
-
+# Assigning variables for sex
 sex_female <- "Female"
 
 sex_male <- "Male"
 
 #Load Aseg file
-aseg_data <- read_tsv("../../data/raw/00_group2_stats_tables/aseg.tsv")
+aseg_data <- read_tsv("aseg.tsv")
 
 #Load thickness file
-thickness_data <- read_csv("../../data/raw/00_group2_stats_tables/CorticalMeasuresENIGMA_ThickAvg.csv")
+thickness_data <- read_csv("Cortical_Measures/CorticalMeasuresENIGMA_ThickAvg.csv")
 
 #Load surface area file
-surfacearea_data <- read_csv("../../data/raw/00_group2_stats_tables/CorticalMeasuresENIGMA_SurfAvg.csv")
+surfacearea_data <- read_csv("Cortical_Measures/CorticalMeasuresENIGMA_SurfAvg.csv")
 
 #Load demographics file
-TAY_demographics <- read_csv("../../data/raw/tay_mri_demo_summer2024.csv")
+demographics_df <- read_tsv("demographics_file.tsv")
+
+# Rename demographic columns to match RBC conventions
+demographics_df <- demographics_df %>%
+  rename(
+    participant_id = subject_id,
+    age = age_scan,
+    sex = assigned_sex_at_birth,
+    wave = time_point
+  )
 ```
 
-standardize the column names
+# Standardize column names
 
 ```{r}
-
-names(aseg_data)[1] <- "clean_subject_id"
-names(thickness_data)[1] <- "clean_subject_id"
-names(surfacearea_data)[1] <- "clean_subject_id"
+#Rename ID columns to common names
+names(aseg_data)[1] <- "participant_id"
+names(thickness_data)[1] <- "participant_id"
+names(surfacearea_data)[1] <- "participant_id"
 
 ```
 
-Function to clean demographic subject_IDs and then rename subjectid to clean_subject_id
+#Function to clean demographic subject_IDs and then rename subject_id to participant_id
 
 ```{r}
-clean_subject_ids_demo <- function(df, subject_id) {
-  df %>%
-    mutate(clean_subject_id = str_replace(!!sym(subject_id), "^TAY01_", "sub-") %>%
-             str_replace("_", "") )  # Remove the underscore between CMH and number
+#Clean demographic subject IDS
+clean_subject_ids <- function(df, id_col, prefix_to_remove = NULL, remove_underscores = TRUE) {
+  clean_ids <- df[[id_col]]
+
+  # Remove custom prefix if specified
+  if (!is.null(prefix_to_remove)) {
+    clean_ids <- str_replace(clean_ids, paste0("^", prefix_to_remove), "sub-")
+  }
+
+  # Remove underscores if requested
+  if (remove_underscores) {
+    clean_ids <- str_replace_all(clean_ids, "_", "")
+  }
+
+  df$clean_subject_id <- clean_ids
+  return(df)
 }
 
+
 # Apply the function to your data frame
-TAY_demographics <- clean_subject_ids_demo(TAY_demographics, "subject_id")
+demographics_df <- clean_subject_ids_demo(demographics_df, "subject_id")
 
 # Check the results
-head(TAY_demographics$clean_subject_id)
+head(demographics_df$clean_subject_id)
 
 template_subvol_fem <- template_subvol_fem %>%
-  rename(clean_subject_id = SubjectID)
-
+  rename(participant_id = SubjectID)
 template_subvol_male <- template_subvol_male %>%
-  rename(clean_subject_id = SubjectID)
-
+  rename(participant_id = SubjectID)
 template_thick_fem <- template_thick_fem %>%
-  rename(clean_subject_id = SubjectID)
-
+  rename(participant_id = SubjectID)
 template_thick_male <- template_thick_male %>%
-  rename(clean_subject_id = SubjectID)
-
+  rename(participant_id = SubjectID)
 template_area_fem <- template_area_fem %>%
-  rename(clean_subject_id = SubjectID)
-
+  rename(participant_id = SubjectID)
 template_area_male <- template_area_male %>%
-  rename(clean_subject_id = SubjectID)
+  rename(participant_id = SubjectID)
 
 ```
 
-standardize column names for the subcortical volume. Need to change names of the some of the variables to match the template file. 
+#Standardize Brain Region Column Names
+## Need to change names of the some of the variables to match the template file. 
 
 ```{r}
+# Subcortical volumes
 standardize_aseg_columns <- function(col_names) {
   # Replace full names with abbreviations for hippocampus and thalamus
   col_names <- str_replace(col_names, "Thalamus-Proper", "thal")
@@ -124,11 +177,7 @@ standardize_aseg_columns <- function(col_names) {
 
 colnames(aseg_data) <- standardize_aseg_columns(colnames(aseg_data))
 
-```
-
-Standardize the column names for the thickness file
-
-```{r}
+# Cortical thickness and surface area
 standardize_col_names <- function(col_names) {
   # Replace full names with abbreviations for hippocampus and thalamus
   col_names <- str_replace(col_names, "right", "R")
@@ -145,25 +194,30 @@ colnames(surfacearea_data) <- standardize_col_names(colnames(surfacearea_data))
 
 ```
 
-First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output). Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
+
+1. This First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output)
+
+2. Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
 
 ```{r}
+#Split demographics by Sex and Filter
 
-female_data <- TAY_demographics %>%
-  filter(time_point == "01") %>%  # First filter for the desired time_point
-  filter(assigned_sex_at_birth == sex_female) %>%  # Then filter for sex
-  select(clean_subject_id, age_scan, assigned_sex_at_birth)  # Keep subject ID, age, and sex for merging
+female_data <- demographics_df %>%
+  filter(wave == "01") %>%  # First filter for the desired time_point
+  filter(sex == sex_female) %>%  # Then filter for sex
+  select(participant_id, age, sex)  # Keep subject ID, age, and sex for merging
 
-male_data <- TAY_demographics %>%
-  filter(time_point == "01") %>%  # First filter for the desired time_point
-  filter(assigned_sex_at_birth == sex_male) %>%  # Then filter for sex
-  select(clean_subject_id, age_scan, assigned_sex_at_birth)  # Keep subject ID, age, and sex for merging
+male_data <- demographics_df %>%
+  filter(wave == "01") %>%  # First filter for the desired time_point
+  filter(sex == sex_male) %>%  # Then filter for sex
+  select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
 
 ```
 
-Filter the aseg data for the sex
+Filter the aseg data for sex
 
 ```{r}
+# Filter raw data by clean IDs
 female_aseg_data_clean <- aseg_data %>%
   filter(clean_subject_id %in% female_data$clean_subject_id)
 
@@ -183,9 +237,12 @@ male_thickness_data_clean <- thickness_data %>%
   filter(clean_subject_id %in% male_data$clean_subject_id)
 
 ```
-Add the sex specific subject_ID, age, and assigned sex to the template_df and this also ensures that there are enough rows to merge the data. 
+
+# Add the sex specific subject_ID, age, and sex to the template_df
+## This also ensures that there are enough rows to merge the data. 
 
 ```{r}
+#Fill template with subject info
 
 update_template <- function(template_df, gendered_data) {
   # Ensure input types are correct
@@ -201,13 +258,13 @@ update_template <- function(template_df, gendered_data) {
     # Create a new data frame from gendered_data with required columns
     new_data <- data.frame(
       clean_subject_id = gendered_data$clean_subject_id,
-      age = gendered_data$age_scan,
-      sex = gendered_data$assigned_sex_at_birth,
+      age = gendered_data$age,
+      sex = gendered_data$sex,
       stringsAsFactors = FALSE
     )
     
     # Ensure consistent data types
-    new_data$clean_subject_id <- as.character(new_data$clean_subject_id)
+    new_data$clean_subject_id <- as.character(new_data$participant_id)
     new_data$sex <- as.character(new_data$sex)
     new_data$age <- as.character(new_data$age)
     
@@ -215,8 +272,8 @@ update_template <- function(template_df, gendered_data) {
     template_df <- bind_rows(template_df, new_data)
   } else {
     # If template_df has rows, update columns directly
-    template_df$clean_subject_id <- gendered_data$clean_subject_id
-    template_df$age <- gendered_data$age_scan
+    template_df$clean_subject_id <- gendered_data$participant_id
+    template_df$age <- gendered_data$age
   }
   
   # Return the updated template
@@ -232,8 +289,6 @@ template_subvol_male <- update_template(template_df = template_subvol_male, gend
 template_thick_male <- update_template(template_df = template_thick_male, gendered_data = male_data)
 template_area_male <- update_template(template_df = template_area_male, gendered_data = male_data)
 
-
-
 ```
 
 Add the default values for the SITE (1 because they were all taken at the same site on the same scanner), ScannerType, and FreeSurfer_Version. Change values if needed. 
@@ -242,9 +297,9 @@ Add the default values for the SITE (1 because they were all taken at the same s
 
 # Create a named list of default values for columns with missing data
 default_values <- list(
-  SITE = "CAMH",
-  Vendor = "GE",
-  FreeSurfer_Version = "7.1"
+  SITE = "SITE_01",
+  Vendor = "Scanner Vendor",
+  FreeSurfer_Version = "x.y"
 )
 
 # Update existing columns with default values if they are NA
@@ -346,9 +401,9 @@ process_template <- function(template_df, primary_data_clean) {
   final_template <- final_template %>%
     select(names(template_df))
   
-  # Remove the specific participant (e.g., "00000020")
+ # Replace "sub-EXCLUDE" with any known QA/test subject IDs to exclude
   final_template <- final_template %>%
-    filter(clean_subject_id != "sub-CMH 00000020")
+    filter(clean_subject_id != "sub-exclude")
   
   # Return the processed data frame
   return(final_template)
@@ -370,15 +425,14 @@ female_surfacearea_data_clean <- female_surfacearea_data_clean %>%
 male_surfacearea_data_clean <- male_surfacearea_data_clean %>%
   select(-LSurfArea, -RSurfArea)
 
-final_area_fem <- left_join(template_area_fem[, c(1, 2, 3, 4, 5, 6)], female_surfacearea_data_clean, by = "clean_subject_id") %>%  
-  left_join(female_thickness_data_clean, by = "clean_subject_id") 
+final_area_fem <- left_join(template_area_fem[, 1:6], female_surfacearea_data_clean, by = "clean_subject_id")
 
 # Select only the columns from template_df
 final_area_fem <- final_area_fem %>%
   select(names(template_area_fem))  # Keeps only the columns in template_df 
 
-final_area_male <- left_join(template_area_male[, c(1, 2, 3, 4, 5, 6)], male_surfacearea_data_clean, by = "clean_subject_id") %>%  
-  left_join(male_thickness_data_clean, by = "clean_subject_id")
+final_area_male <- left_join(template_area_male[, 1:6], male_surfacearea_data_clean, by = "clean_subject_id")
+
 
 # Select only the columns from template_df
 final_area_male <- final_area_male %>%
@@ -448,24 +502,36 @@ numeric_area_male <- na.omit(numeric_area_male)
 ```
 
 ```{r}
-output_subvol_fem <- paste0("../../data/processed/populated_subvol_fem.xlsx")
+# Save populated templates to the output folder
+
+output_subvol_fem <- "output/populated_subvol_fem.xlsx"
 write.xlsx(numeric_subvol_fem, output_subvol_fem)
 
-output_subvol_male <- paste0("../../data/processed/populated_subvol_male.xlsx")
+output_subvol_male <- "output/populated_subvol_male.xlsx"
 write.xlsx(numeric_subvol_male, output_subvol_male)
 
-output_thick_fem <- paste0("../../data/processed/populated_thick_fem.xlsx")
+output_thick_fem <- "output/populated_thick_fem.xlsx"
 write.xlsx(numeric_thick_fem, output_thick_fem)
 
-output_thick_male <- paste0("../../data/processed/populated_thick_male.xlsx")
+output_thick_male <- "output/populated_thick_male.xlsx"
 write.xlsx(numeric_thick_male, output_thick_male)
 
-output_area_fem <- paste0("../../data/processed/populated_area_fem.xlsx")
+output_area_fem <- "output/populated_area_fem.xlsx"
 write.xlsx(numeric_area_fem, output_area_fem)
 
-output_area_male <- paste0("../../data/processed/populated_area_male.xlsx")
+output_area_male <- "output/populated_area_male.xlsx"
 write.xlsx(numeric_area_male, output_area_male)
 
-print(paste("Template has been populated and saved as", output_file))
+# Optional confirmation messages
+print(paste("Saved:", output_subvol_fem))
+print(paste("Saved:", output_subvol_male))
+print(paste("Saved:", output_thick_fem))
+print(paste("Saved:", output_thick_male))
+print(paste("Saved:", output_area_fem))
+print(paste("Saved:", output_area_male))
 ```
 
+# References
+
+Bethlehem, R. A. I., Seidlitz, J., White, S. R., et al. (2022). Brain charts for the human lifespan. Nature, 604(7906), 525–533.
+https://doi.org/10.1038/s41586-022-04554-y
