@@ -10,11 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+This markdown includes steps to download the HBN dataset from reproducible braincharts (https://reprobrainchart.github.io/docs/get_data). These steps can be applied to any of the RBC datasets but they would need to be modified to include the respective dataset name. 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-## Reproducible brain charts HBN dataset download
+## Create directories, download the data using datalad, and then get the necessary files. Warning: do not try to get all the files as the dataset is very large and it would take up a lot of space on your hardrive. 
 
 ```{bash}
 #Make a data directory to hold your data files
@@ -43,13 +41,13 @@ find . -name "*brainmeasures.tsv" -exec cp {} HBN_tsv/brainmeasures_tsv/ \;
 ```
 
 
-## Create directory files and working directories for your data to get stored 
+## Create group tsv files for the brainmeasures tsv with all the subject IDs combined into one file. This will make the data easier to use for the brainage calculators. 
 
 ```{r}
 library(tidyverse)
 
 # Set the directory containing the .tsv files
-brainmeasures_tsv_dir <- "/Users/jiyashah/Data/HBN_tsv/brainmeasures_tsv"
+brainmeasures_tsv_dir <- "/Data/HBN_tsv/brainmeasures_tsv"
 
 # List all .tsv files
 brainmeasures_tsv_files <- list.files(brainmeasures_tsv_dir, pattern = "\\.tsv$", full.names = TRUE)
@@ -61,13 +59,14 @@ combined_df <- map_df(brainmeasures_tsv_files, ~ read_tsv(.x, show_col_types = F
 print(combined_df)
 
 # Create a new csv file with the combined data 
-write_csv(combined_df, "/Users/jiyashah/Data/HBN_tsv/combined_brainmeasures.csv")
+write_csv(combined_df, "/Data/HBN_tsv/combined_brainmeasures.csv")
 
 ```
+## Create a group tsv file for regional surface data
 
 ```{r}
 # Set the directory containing the .tsv files
-regionsurfacestats_tsv_dir <- "/Users/jiyashah/Data/HBN_tsv/regionsurfacestats_tsv"
+regionsurfacestats_tsv_dir <- "/Data/HBN_tsv/regionsurfacestats_tsv"
 
 # List all .tsv files
 regionsurfacestats_tsv_files <- list.files(regionsurfacestats_tsv_dir, pattern = "\\.tsv$", full.names = TRUE)
@@ -81,13 +80,21 @@ print(regions_combined_df)
 # Create a new csv file with the combined data 
 write_csv(regions_combined_df, "/Users/jiyashah/Data/HBN_tsv/combined_regionsurfacestats.csv")
 ```
-## reshape regional data
+
+## Get a list of atlases 
+
+We want a list of atlas names because we want to create seperate tsv files for each atlas. This can be done by first creating a list and saving a list of unique atlases
+
 ```{r}
 atlas_list <- unique(regions_combined_df$atlas)
 
 print(atlas_list)
 
 ```
+## Function to reshape the data
+
+We then want to change the regional data into wide format and seperate each atlas so that the specific atlas files can be used when needed 
+
 ```{r}
 library(tidyverse)
 
@@ -110,13 +117,15 @@ reshape_atlas_to_wide <- function(df, atlas_name) {
     pivot_wider(names_from = variable, values_from = value)
 }
 
-
-
 ```
+
+## Apply the function
+
+This will apply the function and output the combined csv files in the output directory 
 
 ```{r}
 # Directory to save reshaped CSVs
-output_dir <- "/Users/jiyashah/Data/"
+output_dir <- "/Data/"
 dir.create(output_dir, showWarnings = FALSE)
 
 walk(atlas_list, function(atlas_name) {
