@@ -22,15 +22,15 @@ library(readr)
 # Create a directory to store files for BrainAGE calculation. 
 
 # Create the main project directory Developmental_BrainAGE folder
-mkdir -p Developmental_BrainAGEBrainAGE
-cd /path/to/your/Developmental_BrainAGE
+mkdir -p Developmental_BrainAGE
+cd ~/Developmental_BrainAGE
 
 # Make folders within Developmental_BrainAGE_BrainAGE folder
 mkdir -p Developmental_BrainAGE/Freesurfer_Outputs
 mkdir -p Developmental_BrainAGE/output
 
 # Confirm the structure
-tree Developmental_BrainAGE_BrainAGE
+tree Developmental_BrainAGE
 ```
 
 #Download the BrainAGE template, project demographic data, and freesurfer outputs
