@@ -3,7 +3,23 @@ title: "NAPR_analsysis"
 output: html_document
 ---
 
+# Overview
+This R Markdown script creates and populates NAPR BrainAGE templates using freesurfer outputs.
+
+Files and column names have been adapted to align with RBC conventions.
+
+## Background: TIGRLab NAPR Framework
+
+NAPR (Neuroimaging Age Prediction using Regression) is a cloud-based framework developed by TIGRLab for estimating brain age from structural MRI data. It uses Freesurfer-processed surfaces mapped to the fsaverage4 template as input and applies predictive models like Gaussian Process Regression (gausspr) and Relevance Vector Machine (rvmm).
+
+The original software ran on www.cloudneuro.org (now discontinued), and the codebase is available on GitHub: [https://github.com/TIGRLab/napr](https://github.com/TIGRLab/napr).
+
+This script processes the NAPR output files alongside demographic and quality control data to facilitate brain age analyses following RBC standards.
+
+
 ```{r setup, include=FALSE}
+
+# Load packages
 library(ggplot2)
 library(readr)
 library(readxl)
@@ -13,29 +29,55 @@ library(stringr)
 library(dplyr)
 ```
 
-## R Markdown
+```{bash}
+#Create directory to store files for BrainAGE calculation
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+# Create the main project directory NAPR_BrainAGE folder
+mkdir -p NAPR_BrainAGE
+cd /path/to/your/NAPR_BrainAGE
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+#make folders within NAPR_BrainAGE folder
+mkdir -p NAPR_BrainAGE/Freesurfer_Outputs
+mkdir -p NAPR_BrainAGE/output
 
-## Including Plots
+# Confirm the structure
+tree NAPR_BrainAGE
 
-You can also embed plots, for example:
+#Download the NAPR BrainAGE template, project demographic data,freesurfer outputs, datacut IDS and euler data
+
+# Move your input files into the working directory (update file names as needed)
+mv ~/Downloads/<NAPR_template_file.xlsx> NAPR_BrainAGE/
+mv ~/Downloads/<demographics_file.tsv> NAPR_BrainAGE/
+mv ~/Downloads/<datacut_ids_file.csv> NAPR_BrainAGE/
+mv ~/Downloads/<euler_file.tsv> NAPR_BrainAGE/
+
+
+# Move freesurfer files into subfolder
+mv ~/Downloads/lh.Schaefer2018_1000Parcels.*.tsv NAPR_BrainAGE/Freesurfer_Outputs/
+mv ~/Downloads/rh.Schaefer2018_1000Parcels.*.tsv NAPR_BrainAGE/Freesurfer_Outputs/
+```
+
+#Load and Combine NAPR Output files
 
 ```{r pressure, echo=FALSE}
+# Define path to directory containing NAPR output .txt files
 library(dplyr)
-file_dir <- "/external/rprshnas01/tigrlab/scratch/jshah/brain_age_analysis/data/processed/NAPR"
-files <- list.files(file_dir, pattern = "*.txt", full.names = TRUE)
-combined_data <- do.call(rbind, lapply(files, function(file) {
-  # Read the file
-  data <- read.table(file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+file_dir <- "NAPR_BrainAGE/output/" 
+
+# List all text files in the directory
+napr_files <- list.files(file_dir, pattern = "\\.txt$", full.names = TRUE)
+
+# Read and combine all NAPR output files into a single dataframe
+combined_data <- do.call(rbind, lapply(napr_files, function(file) {
+
+# Read the file
+data <- read.table(file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
   
-  # Extract the subject name from the file name
-  subject_name <- gsub(".txt", "", basename(file))  # Remove ".txt" from file name
+# Extract the subject name from the file name
+subject_name <- gsub(".txt", "", basename(file))  # Remove ".txt" from file name
   
-  # Add the subject name as a new column
-  data$clean_subject_id <- subject_name
+# Add the subject name as a new column
+data$clean_subject_id <- subject_name
   
   return(data)  # Return the modified data
 }))
@@ -43,17 +85,23 @@ combined_data <- do.call(rbind, lapply(files, function(file) {
 print(combined_data)
 
 ```
+
+#Process combined NAPR data
+
 ```{r}
 library(tidyr)
 # Assuming combined_data is your dataframe
+
 NAPR_combined_data <- combined_data %>%
   separate(Model..........................Predicted.age, into = c("Model", "Predicted.age"), sep = "\\s+", convert = TRUE) %>%
-    # Pivot wider to create separate columns for gausspr and rvmm
+
+# Pivot wider to create separate columns for gausspr and rvmm
   pivot_wider(
     id_cols =  clean_subject_id,            # Keep subject_name as the unique identifier
     names_from = Model,                # Use Model as column names
     values_from = Predicted.age        # Use Predicted.age as values
   ) %>%
+  
   # Rename columns for clarity
   rename(
     gausspr_age = `gausspr.full.20161228`,
@@ -62,18 +110,23 @@ NAPR_combined_data <- combined_data %>%
 
 print(NAPR_combined_data)
 ```
+
+#Demographic Data
+
 ```{r}
-#Load TAY demographic data to get PSS
+#Load demographic data
 
-tay_demo <- read_csv("/KIMEL/tigrlab/scratch/jshah/brain_age_analysis/data/raw/tay_mri_demo_summer2024.csv", show_col_types = FALSE)
+demographics <- read_csv("NAPR_BrainAGE/demographics.tsv", show_col_types = FALSE)
 
-#Load data cut file 
-datacut_ids <- read_csv("/KIMEL/tigrlab/scratch/jshah/brain_age_analysis/data/raw/datacut_ids.csv")
+# Load datacut IDs
+datacut_ids <- read_csv("NAPR_BrainAGE/datacut_ids.csv", show_col_types = FALSE)
 
-#Load euler's number
+# Load Euler number QC metric
 
-euler_data <- read_tsv("/KIMEL/tigrlab/scratch/jshah/brain_age_analysis/data/raw/00_group2_stats_tables/euler.tsv")
+euler_data <- read_tsv("NAPR_BrainAGE/euler.tsv")
 ```
+
+#Clean subject IDs in demographic and QC data
 
 ```{r}
 clean_subject_ids_demo <- function(df, subject_id) {
@@ -81,7 +134,7 @@ clean_subject_ids_demo <- function(df, subject_id) {
     mutate(clean_subject_id = str_extract(!!sym(subject_id), "[0-9]{8}$"))
 }
 
-TAY_demographics <- clean_subject_ids_demo(tay_demo, "subject_id")
+demographics_clean <- clean_subject_ids_demo(demographics, "subject_id")
 
 datacut_ids_clean <- clean_subject_ids_demo(datacut_ids, "subject_id")
 ```
@@ -98,7 +151,7 @@ euler_data_clean <- clean_subject_ids_tsv(euler_data)
 print(euler_data_clean)
 ```
 
-clean the NAPR combined file subjectIDS
+#Clean the NAPR combined file subject IDS
 
 ```{r}
 # Assuming your dataframe is named 'combined_data' and the column is 'subject_name'
@@ -111,37 +164,46 @@ print(NAPR_combined_data)
 
 ```
 
+#Convert subject IDs to numeric for merging
+
 ```{r}
-TAY_demographics$clean_subject_id <- as.numeric(TAY_demographics$clean_subject_id)
-datacut_ids_clean$clean_subject_id <- as.numeric(datacut_ids_clean$clean_subject_id)
-euler_data_clean$clean_subject_id <- as.numeric(euler_data_clean$clean_subject_id)
+demographics_clean$clean_subject_id <- as.numeric(demographics_clean$clean_subject_id)
+datacut_clean$clean_subject_id <- as.numeric(datacut_clean$clean_subject_id)
+euler_clean$clean_subject_id <- as.numeric(euler_clean$clean_subject_id)
 NAPR_combined_data$clean_subject_id <- as.numeric(NAPR_combined_data$clean_subject_id)
 ```
 
+# Prioritize demographic rows where symptoms are filled out
 ```{r}
 # Group by subject ID and prioritize rows where symptoms are filled out
 # If symptoms are NA, the function will pick the first occurrence that has them filled
-TAY_unique_symptoms <- TAY_demographics %>%
+unique_symptoms <- demographics_clean %>%
   group_by(clean_subject_id) %>%
   arrange(desc(!is.na(prodromal_psychosis))) %>%  # Arrange to prioritize rows where symptoms are NOT NA
-  slice(1) %>%  # Keep the first row per subject (the one with symptoms, if available)
+  slice(1) %>%  # Keep the first row per subject 
   ungroup()
 
 # The result will be a dataframe with unique subject IDs and prioritized symptom data
-print(TAY_unique_symptoms)
+print(unique_symptoms)
 ```
+
+#Merge data for final analysis
+
 ```{r}
+# Select relevant columns from NAPR predictions
 final_NAPR_analysis_data <- NAPR_combined_data %>%
   select(clean_subject_id, rvmm_age, gausspr_age)
 
+# Join with unique symptom data (prodromal psychosis, age at scan, sex assigned at birth)
 final_NAPR_analysis_data <- final_NAPR_analysis_data %>%
-  left_join(TAY_unique_symptoms %>%
+  left_join(unique_symptoms %>%
               select(clean_subject_id, prodromal_psychosis, age_scan, assigned_sex_at_birth),
             by = "clean_subject_id")
 print(final_NAPR_analysis_data)
 ```
 
 ```{r}
+# Add Euler number (quality metric) to the dataset
 final_NAPR_analysis_data <- final_NAPR_analysis_data %>%
   left_join(euler_data_clean %>% 
               select(clean_subject_id, mean_euler_bh),  
@@ -165,23 +227,22 @@ print(datacut_filtered_data)
 ```
 
 ```{r}
+# Further filter for good surface reconstruction quality (Euler number threshold)
 euler_filtered_data <- datacut_filtered_data %>%
   filter(mean_euler_bh >= -200)
 
 print(euler_filtered_data)
 ```
-```{r}
-euler_filtered_data <- euler_filtered_data %>%
-  mutate(assigned_sex_at_birth = case_when(
-    clean_subject_id == "196" ~ "Female",
-    clean_subject_id == "206" ~ "Male",
-    clean_subject_id == "263" ~ "Male",
-    clean_subject_id == "278" ~ "Female",
-    clean_subject_id == "308" ~ "Male",
-    clean_subject_id == "421" ~ "Female",
-    TRUE ~ assigned_sex_at_birth
-  ))
 
+```{r}
+# Optional: Apply manual corrections for known data issues
+# euler_filtered_data <- euler_filtered_data %>%
+#   mutate(sex = case_when(
+#     participant_id == "12345678" ~ "Male",
+#     TRUE ~ sex
+#   ))
+
+# Identify any remaining rows with missing values
 rows_with_na <- euler_filtered_data %>%
   filter(if_any(everything(), is.na))
 print(rows_with_na)
@@ -190,10 +251,27 @@ print(rows_with_na)
 ```{r}
 cleaned_filtered_data <- na.omit(euler_filtered_data)
 
-cleaned_filtered_data <- cleaned_filtered_data[cleaned_filtered_data$clean_subject_id != "282", ]
+cleaned_filtered_data <- cleaned_filtered_data[cleaned_filtered_data$clean_subject_id != "ID Number", ]
 
+# Rename columns to match RBC conventions
+cleaned_filtered_data <- cleaned_filtered_data %>%
+  rename(
+    participant_id = clean_subject_id,
+    age = age_scan,
+    sex = assigned_sex_at_birth
+  )
 print(cleaned_filtered_data)
 
-write.csv(cleaned_filtered_data, "/KIMEL/tigrlab/scratch/jshah/brain_age_analysis/data/processed/NAPR/complete_NAPR_data.csv", row.names = FALSE)
+write.csv(cleaned_filtered_data, "NAPR_BrainAGE/output/complete_NAPR_data.csv", row.names = FALSE)
 ```
+
+## References
+
+- Franke, K., & Gaser, C. (2012). *Longitudinal changes in individual BrainAGE...* GeroPsych, 25(4), 235–245. [https://doi.org/10.1024/1662-9647/a000074](https://doi.org/10.1024/1662-9647/a000074)
+- Pardoe, H. R. et al. (2017). *Structural brain changes in epilepsy resemble premature brain aging*. Epilepsy Research, 133, 28–32. [https://doi.org/10.1016/j.eplepsyres.2017.04.001](https://doi.org/10.1016/j.eplepsyres.2017.04.001)
+- NAPR GitHub: [https://github.com/hpardoe/napr](https://github.com/hpardoe/napr)
+- Bethlehem, R. A. I., et al. (2022). *Brain charts for the human lifespan*. Nature. [https://doi.org/10.1038/s41586-022-04554-y](https://doi.org/10.1038/s41586-022-04554-y)
+
+- Cole JH, Franke K. Predicting Age Using Neuroimaging: Innovative Brain Ageing Biomarkers. Trends Neurosci. 2017;40(12):681–690.  
+- Pardoe HR et al., NAPR: A cloud-based framework for age prediction using neuroimaging. Neuroimage. 2016.
 
