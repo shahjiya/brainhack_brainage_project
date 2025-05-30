@@ -42,8 +42,8 @@ mv ~/Downloads/template_brainage.xlsx Developmental_BrainAGE/
 mv /path/to/your/demographic_file.tsv Developmental_BrainAGE/ #Replace /path/to/your/demographic_file.tsv with your actual file path
 
 # Move freesurfer files into subfolder
-mv ~/Downloads/lh.Schaefer2018_1000Parcels.*.tsv Developmental_BrainAGE/Freesurfer_Outputs/
-mv ~/Downloads/rh.Schaefer2018_1000Parcels.*.tsv Developmental_BrainAGE/Freesurfer_Outputs/
+mv ~/Downloads/lh.Schaefer2018_400Parcels.*.tsv Developmental_BrainAGE/Freesurfer_Outputs/
+mv ~/Downloads/rh.Schaefer2018_400Parcels.*.tsv Developmental_BrainAGE/Freesurfer_Outputs/
 ```
 # Load Files
 # Change sex to "Male" or "Female" depending on analysis.
@@ -61,7 +61,7 @@ dir.create("output", recursive = TRUE, showWarnings = FALSE)
 dir.create("../data/processed", recursive = TRUE, showWarnings = FALSE)
 
 # Load Developmental BrainAGE template and demographic data
-template_brainage <- read_excel("Developmental_BrainAGE_template.xlsx")
+template_brainage <- read_excel("template_brainage.xlsx")
 demographics_df <- read_tsv("demographics.tsv")
 
 # Load parcellation files (update path if needed)
@@ -69,9 +69,6 @@ lh_thick <- read_tsv("Freesurfer_Outputs/lh.Schaefer2018_400Parcels.thickness.ts
 lh_surf <- read_tsv("Freesurfer_Outputs/lh.Schaefer2018_400Parcels.surfacearea.tsv")
 rh_thick <- read_tsv("Freesurfer_Outputs/rh.Schaefer2018_400Parcels.thickness.tsv")
 rh_surf <- read_tsv("Freesurfer_Outputs/rh.Schaefer2018_400Parcels.surfacearea.tsv")
-
-# Set the path to your demographic data file
-demographic_df <- read_tsv("demographics.tsv")
 
 ```
 
