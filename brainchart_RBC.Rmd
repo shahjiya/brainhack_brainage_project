@@ -1,0 +1,207 @@
+---
+title: "brainchart.io"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Brainchart.io
+
+Before running this script, make sure to use the brainvol.stats.sh script to extract the ventricles volume
+## Load Libraries
+
+```{r cars}
+library(readxl)
+library(openxlsx)
+library(stringr)
+library(dplyr)
+library(readr)
+```
+
+Load necessary brainage template, demographic file, aseg and aparc files for brainAGE analysis. 
+
+Change sex to "Male" or "Female" depending on analysis.
+
+```{r}
+
+#Load excel file
+template_brainchart <- read_csv("~/Data/raw/template.csv")
+                                
+sex <- "Female"
+
+#Load combined_brainmeasures.csv
+brainmeasures_file <- read_csv("~/Data/raw/combined_brainmeasures.csv")
+
+#Load demographic file
+
+demographic <- read_tsv("~/Data/raw/study-HBN_desc-participants.tsv")
+
+```
+Function to clean and standardize subject IDs for the aseg, surface area, and thickness data. 
+
+```{r}
+#save the original column names
+original_template_column_names <- colnames(template_brainchart)
+
+clean_subject_ids_tsv <- function(df) {
+  colnames(df)[1] <- "participant"  # Rename the first column
+  df <- df %>%
+    mutate(participant = str_remove(participant, "^sub-"))  # Remove "sub-" from start
+  return(df)
+}
+
+brainmeasures_file_clean<- clean_subject_ids_tsv(brainmeasures_file)
+
+demographic_clean <- demographic %>%
+  rename(participant = participant_id)
+```
+
+
+```{r}
+demographic_clean_age <- demographic_clean %>%
+  rename(
+    Age = age
+  )
+
+```
+
+```{r}
+brainmeasures_renamed <- brainmeasures_file_clean %>%
+  rename(
+    GMV = TotalGray_TotalGrayVol,      
+    WMV = CerebralWhiteMatter_CerebralWhiteMatterVol, 
+    sGMV = SubCortGray_SubCortGrayVol,
+    Ventricles = VentricleChoroidVol
+  )
+
+```
+
+First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output). Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
+
+```{r}
+
+filtered_demo_data <- demographic_clean_age %>%
+  select(participant, Age , sex)  # Keep subject ID, age, and sex for merging
+
+```
+
+Add the sex specific subject_ID, age, and assigned sex to the template_df and this also ensures that there are enough rows to merge the data. 
+
+```{r}
+
+# Make sure the subject_ids, sex, and age are character data types
+template_brainchart$participant <- as.character(template_brainchart$participant)
+template_brainchart$participant <- as.character(template_brainchart$participant)  # Add sex column conversion
+template_brainchart$participant <- as.character(template_brainchart$participant)  # Add age column conversion
+
+# First, check if template_df has rows
+if (nrow(template_brainchart) <= 1) {
+  # Create an empty data frame with the same structure as template_df but add the subject IDs and age
+  # Keep all the original columns, but add the new data
+  template_brainchart <- template_brainchart[0, ]  # Retain column structure but no rows
+  
+    # Create a data frame with the required data from filtered_demo_data
+    new_data <- filtered_demo_data[, c("participant", "Age", "sex")]
+    
+    # Convert to character to match template_df column types
+    new_data$participant <- as.character(new_data$participant)
+    new_data$sex <- as.character(new_data$sex)
+    new_data$Age <- as.character(new_data$Age)
+    
+    # Add the new data to the template while keeping the rest of the structure intact
+    template_brainchart <- bind_rows(template_brainchart, new_data)
+} else {
+    cat("Updating template_df with selected columns from filtered_demo_data...\n")
+    
+    # Update specific columns in the existing template_df
+    template_brainchart$participant <- filtered_demo_data$participant
+    template_brainchart$Age <- filtered_demo_data$Age
+    template_brainchart$sex <- filtered_demo_data$sex
+}
+```
+
+Add the default values for the SITE (1 because they were all taken at the same site on the same scanner), ScannerType, and FreeSurfer_Version. Change values if needed. 
+
+```{r}
+
+# Create a named list of default values for columns with missing data
+default_values <- list(
+  study = "HBN",
+  country = "US",
+  run = "1",
+  session = "1",
+  dx = "CN",
+  fs_version = "FS6_T1"
+)
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_brainchart)) {
+    template_brainchart[[col]] <- ifelse(is.na(template_brainchart[[col]]), default_values[[col]], template_brainchart[[col]])
+  }
+}
+```
+
+Convert all the columns from the files that need to be merged to characters so that they can be merged.
+
+```{r}
+
+# Convert all columns in the template_df to characters
+template_brainchart <- template_brainchart %>%
+  mutate(across(everything(), as.character))
+
+brainmeasures_renamed <- brainmeasures_renamed %>%
+  mutate(across(everything(), as.character))
+
+```
+
+Populate the template df by joining the aseg, surface area, and thickness data. 
+
+```{r}
+final_template_brainchart <- left_join(template_brainchart[, c(1:11,16,17)], brainmeasures_renamed, by = "participant") 
+
+# Select only the columns from template_df
+final_template_brainchart <- final_template_brainchart %>%
+  select(names(template_brainchart))  # Keeps only the columns in template_df  
+
+#Revert back to original column names found in the template
+colnames(final_template_brainchart)[1:length(original_template_column_names)] <- original_template_column_names
+
+```
+
+```{r}
+final_template_brainchart$Age <- as.numeric(final_template_brainchart$Age)
+final_template_brainchart$GMV <- as.numeric(final_template_brainchart$GMV)
+final_template_brainchart$WMV <- as.numeric(final_template_brainchart$WMV)
+final_template_brainchart$sGMV <- as.numeric(final_template_brainchart$sGMV)
+final_template_brainchart$Ventricles <- as.numeric(final_template_brainchart$Ventricles)
+
+final_template_brainchart$...1 <- NULL
+final_template_brainchart$INDEX.TYPE <- NULL
+final_template_brainchart$INDEX.OB <- NULL
+
+final_template_brainchart$age_days <- (final_template_brainchart$Age * 365.245) + 280
+```
+
+```{r}
+final_template_brainchart_clean <- final_template_brainchart[!is.na(final_template_brainchart$GMV), ]
+```
+
+
+Save the final populated template into a new Excel file
+
+```{r}
+
+output_file <- paste0("~/Data/processed/populated_template_brainchart.csv")
+write.csv(final_template_brainchart_clean, output_file)
+
+print(paste("Template has been populated and saved as", output_file))
+```
