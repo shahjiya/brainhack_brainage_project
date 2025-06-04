@@ -14,7 +14,10 @@ The guide will walk you step by step through:
 ```{r setup, include=FALSE}
 # This sets options so the code and its results are shown in the final document.
 knitr::opts_chunk$set(echo = TRUE)
-```## Step 1: Load Your Toolboxes (Libraries)
+
+```
+
+## Step 1: Load Your Toolboxes (Libraries)
 
 ```{r}
 library(readxl)      # For reading Excel files
@@ -31,10 +34,11 @@ library(readr)       # For reading CSV files
 We need a file that contains typical brain values used to estimate brain age.
 
 ```{r}
-# Load a CSV file (spreadsheet with comma-separated values)
-template_brainage <- read_csv("/data/raw/brainage_template.csv")
+# Load a CSV file (spreadsheet with comma-separated values) You can download this file from https://brainchart.shinyapps.io/brainchart/ go to downloaded files -> download template file
 
-# Purpose of this line: “Save the contents of that file in a container named template_brainage”
+template_brainchart <- read_csv("~/data/raw/template.csv")
+
+# Purpose of this line: “Save the contents of that file in a container named template_brainchart”
 ```
 
 ---
@@ -45,7 +49,8 @@ This file contains personal information like subject ID, age, sex, etc.
 
 ```{r}
 # Load a spreadsheet file with subject demographic info
-demo <- read_excel("/data/raw/subject_info.xlsx")
+demo <- read_tsv("/data/raw/study-HBN_desc-participants.tsv")
+combined_brainmeasures <- read_csv("~/Data/raw/combined_brainmeasures.csv")
 
 # Now we have the data stored in something called 'demo'
 ```
@@ -59,7 +64,6 @@ We load brain structure data from two files: 'aseg' and 'aparc'.
 ```{r}
 # Load aseg data (volume of brain structures)
 aseg <- read_csv("/data/raw/aseg_volumes.csv")
-
 # Load aparc data (more brain structure measurements)
 aparc <- read_csv("/data/raw/aparc_data.csv")
 ```
