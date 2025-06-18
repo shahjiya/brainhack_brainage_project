@@ -133,9 +133,10 @@ Add the default values for the SITE (1 because they were all taken at the same s
 ```{r}
 
 # Create a named list of default values for columns with missing data
+#Cannot write HBN, braincharts gets mad and wil not output centiles
 default_values <- list(
   study = "HBN",
-  country = "US",
+  country = "USA",
   run = "1",
   session = "1",
   dx = "CN",

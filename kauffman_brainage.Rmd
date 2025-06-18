@@ -29,17 +29,196 @@ git clone https://github.com/tobias-kaufmann/brainage.git
 feature_names <- read_csv("brainage/feature-names.csv")
 combined_brainmeasures <- read_csv("~/Data/HBN_tsv/combined_brainmeasures.csv")
 glassr_output <- read_csv("~/Data/glasser_wide.csv")
-demographics <- read_csv("~/Data/HBN_BIDS/study-HBN_desc-participants.tsv")
+demographic_df <- read_tsv("~/Data/HBN_BIDS/study-HBN_desc-participants.tsv")
 
 ```
 
-## Rename subject IDs
+```{r}
+clean_subject_ids_tsv <- function(df) {
+  colnames(df)[1] <- "participant_id"  # Rename the first column
+  df <- df %>%
+    mutate(clean_subject_id = str_remove(participant_id, "^sub-"))  # Remove "sub-" from start
+  return(df)
+}
+
+brainmeasures_clean <- clean_subject_ids_tsv(combined_brainmeasures)
+glassr_clean <- clean_subject_ids_tsv(glassr_output)
+```
+
+
+## Rename column names
 
 ```{r pressure, echo=FALSE}
-colnames(glassr_output) <- colnames(glassr_output) %>%
+colnames(glassr_clean) <- colnames(glassr_clean) %>%
   str_replace_all("ThickAvg", "thickness") %>%
   str_replace_all("SurfArea", "area") %>%
   str_replace_all("GrayVol", "volume")
 
 ```
 
+
+```{r}
+# Assume feature_names is a vector or single-column data frame
+column_names <- feature_names[[1]]  # extract the vector of names
+
+# Optionally, prepend a subject_id column
+column_names <- c("clean_subject_id", column_names)
+
+# Create an empty dataframe with those column names and 0 rows
+wide_structures <- data.frame(matrix(nrow = 0, ncol = length(column_names)))
+colnames(wide_structures) <- column_names
+
+# Check it
+print(wide_structures)
+```
+```{r}
+gendered_data <- demographic_df %>%
+  filter(sex == "Female") %>%
+  select(clean_subject_id = participant_id, sex)
+
+print(gendered_data)
+```
+
+```{r}
+gendered_glassr_data <- glassr_clean %>%
+  filter(clean_subject_id %in% gendered_data$clean_subject_id)
+
+print(gendered_glassr_data)
+```
+
+## Rename the brainmeasures to match the templates
+
+```{r}
+# Define structure name mapping
+structure_map <- c(
+  "Left_Lateral_Ventricle" = "Left.Lateral.Ventricle",
+  "Left_Inf_Lat_Vent" = "Left.Inf.Lat.Vent",
+  "Left_Cerebellum_White_Matter" = "Left.Cerebellum.White.Matter",
+  "Left_Cerebellum_Cortex" = "Left.Cerebellum.Cortex",
+  "Left_Thalamus_Proper" = "Left.Thalamus.Proper",
+  "Left_Caudate" = "Left.Caudate",
+  "Left_Putamen" = "Left.Putamen",
+  "Left_Pallidum" = "Left.Pallidum",
+  "Third_Ventricle" = "X3rd.Ventricle",
+  "Fourth_Ventricle" = "X4th.Ventricle",
+  "Brain_Stem" = "Brain.Stem",
+  "Left_Hippocampus" = "Left.Hippocampus",
+  "Left_Amygdala" = "Left.Amygdala",
+  "Left_Accumbens_area" = "Left.Accumbens.area",
+  "Right_Lateral_Ventricle" = "Right.Lateral.Ventricle",
+  "Right_Inf_Lat_Vent" = "Right.Inf.Lat.Vent",
+  "Right_Cerebellum_White_Matter" = "Right.Cerebellum.White.Matter",
+  "Right_Cerebellum_Cortex" = "Right.Cerebellum.Cortex",
+  "Right_Thalamus_Proper" = "Right.Thalamus.Proper",
+  "Right_Caudate" = "Right.Caudate",
+  "Right_Putamen" = "Right.Putamen",
+  "Right_Pallidum" = "Right.Pallidum",
+  "Right_Hippocampus" = "Right.Hippocampus",
+  "Right_Amygdala" = "Right.Amygdala",
+  "Right_Accumbens_area" = "Right.Accumbens.area",
+  "CC_Posterior" = "CC_Posterior",
+  "CC_Mid_Posterior" = "CC_Mid_Posterior",
+  "CC_Central" = "CC_Central",
+  "CC_Mid_Anterior" = "CC_Mid_Anterior",
+  "CC_Anterior" = "CC_Anterior",
+  "lhCortex" = "lhCortexVol",
+  "rhCortex" = "rhCortexVol",
+  "lhCerebralWhiteMatter" = "lhCorticalWhiteMatterVol",
+  "rhCerebralWhiteMatter" = "rhCorticalWhiteMatterVol",
+  "SubCortGray" = "SubCortGrayVol",
+  "TotalGray" = "TotalGrayVol",
+  "SupraTentorial" = "SupraTentorialVol",
+  "EstimatedTotalIntraCranialVol" = "EstimatedTotalIntraCranialVol"
+)
+
+# Function to apply mapping and ensure unique column names
+rename_columns_no_duplicates <- function(cols, map) {
+  new_names <- character(length(cols))
+  name_tracker <- list()
+  
+  for (i in seq_along(cols)) {
+    col <- cols[i]
+    renamed <- col  # default
+    matched <- FALSE
+
+    for (prefix in names(map)) {
+      if (startsWith(col, prefix)) {
+        matched <- TRUE
+        base_name <- map[[prefix]]
+
+        if (grepl("_Volume_mm3$", col)) {
+          # Keep one clean name for _Volume_mm3
+          if (is.null(name_tracker[[base_name]])) {
+            renamed <- base_name
+            name_tracker[[base_name]] <- 1
+          } else {
+            name_tracker[[base_name]] <- name_tracker[[base_name]] + 1
+            renamed <- paste0(base_name, ".", name_tracker[[base_name]])
+          }
+        } else {
+          # All others get suffixes
+          if (is.null(name_tracker[[base_name]])) {
+            name_tracker[[base_name]] <- 2
+          } else {
+            name_tracker[[base_name]] <- name_tracker[[base_name]] + 1
+          }
+          renamed <- paste0(base_name, ".", name_tracker[[base_name]])
+        }
+        break
+      }
+    }
+
+    new_names[i] <- if (matched) renamed else col
+  }
+
+  # Ensure uniqueness
+  make.unique(new_names, sep = ".")
+}
+
+# Apply renaming to your dataframe
+brainmeasures_renamed <- brainmeasures_clean
+colnames(brainmeasures_renamed) <- rename_columns_no_duplicates(colnames(brainmeasures_clean), structure_map)
+
+```
+
+## Only get the female data from the brain measures file
+
+```{r}
+gendered_brainmeasure_data <- brainmeasures_renamed%>%
+  filter(clean_subject_id %in% gendered_data$clean_subject_id)
+
+print(gendered_brainmeasure_data)
+```
+
+```{r}
+gendered_data$clean_subject_id <- as.character(gendered_data$clean_subject_id)
+gendered_brainmeasure_data$clean_subject_id <- as.character(gendered_brainmeasure_data$clean_subject_id)
+
+# Save the original column names (structure) before doing anything
+# First, check if template_df has rows
+if (nrow(wide_structures) == 0) {
+  # Create an empty data frame with the same structure as template_df but add the subject IDs and age
+  # Keep all the original columns, but add the new data
+  wide_structures <- wide_structures[0, ]  # Retain column structure but no rows
+  
+  # Now create a new data frame that only updates clean_subject_id and AGE
+  new_data <- data.frame(clean_subject_id =gendered_data$clean_subject_id,
+                         stringsAsFactors = FALSE)
+  
+  # Bind the new data to the empty template, ensuring columns remain intact
+  wide_structures <- bind_rows(wide_structures, new_data)
+} else {
+  # If template_df already has rows, just update clean_subject_id and AGE columns
+  wide_structures$clean_subject_id <- gendered_data$clean_subject_id
+}
+
+print(wide_structures)
+```
+
+
+# Check if subject IDs from both dataframes match
+
+```{r}
+common_ids <- intersect(template_df$clean_subject_id, gendered_lh_thickness_data$clean_subject_id)
+print(paste("Number of matching subject IDs:", length(common_ids)))
+```
