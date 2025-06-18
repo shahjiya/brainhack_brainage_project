@@ -17,6 +17,7 @@ library(openxlsx)
 library(stringr)
 library(dplyr)
 library(readr)
+library(rlang) 
 ```
 
 ```{bash}
@@ -60,195 +61,175 @@ demographic_df <- read_tsv("study-HBN_desc-participants.tsv")
 
 # Load parcellation files (update path if needed)
 atlas_data <- read_csv("Schaefer2018_400Parcels_7Networks_order_wide.csv") 
+
+# Define sex for filtering later
+sex_filter <- "Female" # Change sex_filter to "Male" or "Female" depending on analysis.
 ```
 
-# Clean column names to match the Developmental BrainAGE template.
-# 1. Saves original column names for reference
-# 2. Match column names in the dataset to match template column names
+# Clean column names to match the Developmental BrainAGE template and prepare Atlas data.
 ```{r}
-# Save the original column names for comparison with the template
-original_template_column_names <- colnames(template_brainage)
+# Define the renaming function
+# This function is designed to take a SINGLE column name and return its new name.
+convert_atlas_col_name <- function(name) {
+  # This regex extracts 5 key parts from Schaefer 7Networks column names:
+  # 1. (lh|rh): Initial hemisphere (e.g., 'lh_') - for pattern matching.
+  # 2. (LH|RH): Main hemisphere (e.g., 'LH_') - used directly in the new name.
+  # 3. ([A-Za-z_]+): Network/parcel name (e.g., 'Cont_Cing') - keeps original capitalization.
+  # 4. ([0-9]+): Parcel number (e.g., '1').
+  # 5. (.*): Measurement type (e.g., 'SurfArea', 'CurvInd').
 
-# Function to clean columns
-# Fix data column names to match template column names
+  match_schaefer <- str_match(name, "^(lh|rh)_7Networks_(LH|RH)_([A-Za-z_]+)_([0-9]+)_(.*)$")
 
-atlas_renamed <- atlas_data %>%
-  rename_with(~ {
-    name <- .x # Get the current column name
+  # Check if the name matches the expected Schaefer atlas pattern
+  if (!is.na(match_schaefer[1,1])) {
+    # Extract components from the regex match
+    internal_hemi <- match_schaefer[1, 3]
+    network_parcel_name <- match_schaefer[1, 4]
+    parcel_num <- match_schaefer[1, 5]
+    measure_type <- tolower(match_schaefer[1, 6])
 
-    # Apply the first replacement only if the pattern matches
-    name_transformed <- if_else(
-      str_detect(name, "^(lh_|rh_)(7Networks_)(L[HR]_).*_(ThickAvg|SurfArea)$"),
-      str_replace(name, "^(lh_|rh_)(7Networks_)(L[HR]_)", "X\\2\\3"),
-      name # If pattern doesn't match, keep the original name
-    )
+    # Build the core of the new name: X7Networks_HEMI_NetworkParcel_Number
+    new_name_base <- paste("X7Networks", internal_hemi, network_parcel_name, parcel_num, sep = "_")
 
-    # Apply the ThickAvg to thick replacement
-    name_transformed <- str_replace(name_transformed, "_ThickAvg$", "thick")
+    # Append 'area' or 'thick' for specific measures, otherwise append original measure type
+    if (measure_type == "surfarea") {
+      new_name_final <- paste0(new_name_base, "area")
+    } else if (measure_type == "thickavg") {
+      new_name_final <- paste0(new_name_base, "thick")
+    } else {
+      new_name_final <- paste0(new_name_base, tolower(measure_type))
+    }
+    return(new_name_final)
 
-    # Apply the SurfArea to area replacement
-    name_transformed <- str_replace(name_transformed, "_SurfArea$", "area")
+  } else {
+    # If no match, return the original name unchanged (e.g., 'session_id').
+    return(name)
+  }
+}
 
-    return(name_transformed) # Return the potentially transformed name
-  },
-  # Apply this renaming only to columns that start with lh_7Networks_ or rh_7Networks_and end with ThickAvg or SurfArea, as specified by your needs.
-  .cols = c(
-    matches("^(lh_|rh_)7Networks_.*_ThickAvg$") |
-    matches("^(lh_|rh_)7Networks_.*_SurfArea$")
-  )
-)
+# Identify the columns that need renaming
+cols_to_rename <- names(atlas_data)[
+  startsWith(names(atlas_data), "lh_") | startsWith(names(atlas_data), "rh_") &
+  grepl("7Networks_", names(atlas_data), ignore.case = TRUE)
+]
 
+# Apply the renaming function to these column names
+new_col_names <- sapply(cols_to_rename, convert_atlas_col_name, USE.NAMES = FALSE)
+
+# Create a named vector for renaming: c(new_name = old_name, ...)
+renaming_vector <- setNames(cols_to_rename, new_col_names)
+
+# Apply the renaming and create clean_subject_id 
+atlas_processed <- atlas_data %>%
+  rename(!!!renaming_vector) %>% # Apply the Schaefer atlas column renaming
+  mutate(clean_subject_id = str_remove(session_id, "^sub-")) %>% # Create clean_subject_id from session_id
+  select(-session_id) # Remove the original session_id column
 ```
-# Function to clean and standardize subject IDs for the thickness and surface area data
+# Prepare Demographic Data
 
 ```{r}
-atlas_clean <- atlas_renamed %>%
-  mutate(clean_subject_id = str_remove(subject_id, "^sub-"))
-```
+demographic_processed <- demographic_df %>%
+  mutate(clean_subject_id = participant_id) %>% # Ensure clean_subject_id matches atlas data format
+  filter(wave == "1", sex == sex_filter) %>% # Filter by wave to avoid duplicates and the specified sex_filter
+  select(clean_subject_id, age) %>% # Select only necessary columns
+  rename(AGE = age) %>% # Rename 'age' to 'AGE' as per template
+  # Ensure clean_subject_id is character type for merging
+  mutate(clean_subject_id = as.character(clean_subject_id))
 
-# Prepare demographic data
-```{r}
-demographic_clean <- demographic_df %>%
-  mutate(clean_subject_id = participant_id)
-```
-# Prepare demographic data filtered for baseline (wave == "1") and sex (e.g., "Female"), selecting clean_subject_id and age
-```{r}
-gendered_data <- demographic_clean %>%
-  filter(wave == "1", sex == "Female") %>%
-  select(clean_subject_id, age) %>%
-  rename(AGE = age)
-```
-
-# Create or update the template data frame with subject IDs and age from demographic data
-```{r}
-if (!("clean_subject_id" %in% colnames(template_brainage))) {
-  message("Template has no subject IDs — creating new one.")
-  
-  # Initialize empty template with same structure
-  template_df <- data.frame(matrix(ncol = ncol(template_brainage), nrow = nrow(gendered_data)))
-  colnames(template_df) <- colnames(template_brainage)
-  
-  # Insert subject IDs and ages
-  template_df$clean_subject_id <- gendered_data$clean_subject_id
-  template_df$AGE <- gendered_data$AGE
-} else {
-  template_df <- template_brainage
+# Check for duplicate subject IDs after filtering, which could cause issues
+if (any(duplicated(demographic_processed$clean_subject_id))) {
+  warning("Duplicate 'clean_subject_id' found in demographic data after filtering. This may cause issues during merging.")
 }
 ```
 
-# Filter atlas data for subjects present in your demographic subset (e.g., females, baseline)
+# Filter Atlas Data and Merge with Demographic Information
 ```{r}
-gendered_atlas_data <- atlas_clean %>%
-  filter(clean_subject_id %in% gendered_data$clean_subject_id)
-```
+# Get the exact column names expected from the template (excluding ID and AGE for now)
+template_parcellation_cols <- setdiff(colnames(template_brainage), c("AGE", "clean_subject_id")) # Assuming template doesn't have clean_subject_id
 
+# Filter atlas data for subjects present in your demographic subset
+gendered_atlas_data <- atlas_processed %>%
+  filter(clean_subject_id %in% demographic_processed$clean_subject_id) %>%
+  # Select only the clean_subject_id and the relevant brain measure columns
+  select(clean_subject_id, all_of(template_parcellation_cols[template_parcellation_cols %in% colnames(.)])) %>%
+  # Ensure brain measures are numeric where possible before merging
+  mutate(across(where(is.character) & !matches("clean_subject_id"), ~ suppressWarnings(as.numeric(.))))
 
-# Ensure that all columns remain intact while adding the female data
+# Start building the final data frame with subject IDs and their ages
+final_template <- demographic_processed %>%
+  select(clean_subject_id, AGE) %>%
+  # Merge the brain measure data into final_template by clean_subject_id
+  left_join(gendered_atlas_data, by = "clean_subject_id")
 
-```{r}
-# Define ID column name
-id_col <- "clean_subject_id"
+# Define the *exact* target column order from the original template
+# The `template_brainage.xlsx` does NOT have `clean_subject_id`.
+# The final output to the calculator should match the template exactly.
+# Using `template_brainage` column names for final selection and order.
+final_target_columns <- colnames(template_brainage)
 
-# Ensure subject IDs are character type
-template_df[[id_col]] <- as.character(template_df[[id_col]])
-gendered_data[[id_col]] <- as.character(gendered_data[[id_col]])
-
-# If template_df is empty (0 rows), initialize with gendered_data and proper columns
-if (nrow(template_df) == 0) {
-  # Create an empty data frame with template_df columns but no rows
-  template_df <- template_df[0, ]
-
-  # Create new data frame with subject IDs and AGE
-  new_data <- gendered_data %>%
-    select(all_of(c(id_col, "AGE")))
-
-  # Bind new_data to template_df (other columns will be NA)
-  template_df <- bind_rows(template_df, new_data)
-} else {
-  # If template_df already has rows, merge AGE from gendered_data by subject ID
-  template_df <- template_df %>%
-    select(-AGE) %>%                     # Remove existing AGE to avoid duplicates
-    left_join(gendered_data %>% select(all_of(c(id_col, "AGE"))), by = id_col)
+# Add any columns from the template that are missing in final_template, filled with NA
+# This ensures that even if a parcellation area has no data for the subjects, its column exists.
+missing_in_final_template <- setdiff(final_target_columns, colnames(final_template))
+if (length(missing_in_final_template) > 0) {
+  final_template[missing_in_final_template] <- NA
 }
-```
 
-# Ensure all data are characters to avoid merge issues
-# Convert everything to character
-```{r}
-template_df <- template_df %>% mutate(across(everything(), as.character))
-gendered_data <- gendered_data %>% mutate(across(everything(), as.character))
-gendered_atlas_data <- gendered_atlas_data %>% mutate(across(everything(), as.character))
-```
-
-# Check if subject IDs from both dataframes match
-```{r}
-common_ids <- intersect(template_df$clean_subject_id, gendered_data$clean_subject_id)
-print(paste("Number of matching subject IDs:", length(common_ids)))
-```
-
-# Merge Subject ID and Age into template AND brain measures
-```{r}
-# Start `final_template` with subject IDs and their ages
-final_template <- gendered_data %>%
-  select(clean_subject_id, AGE)
-
-# Get the brain measure columns from your `template_brainage`
-brain_measure_cols_from_template <- setdiff(colnames(template_brainage), c("clean_subject_id", "AGE"))
-
-# Select relevant brain measure columns from `gendered_atlas_data` for merging
-atlas_data_for_merge <- gendered_atlas_data %>%
-  select(clean_subject_id, all_of(brain_measure_cols_from_template))
-
-# Merge the brain measure data into `final_template`
+# Reorder final_template columns to match the template_brainage order exactly
+# Using `all_of` for robust selection of columns by name.
 final_template <- final_template %>%
-  left_join(atlas_data_for_merge, by = "clean_subject_id")
+  select(all_of(final_target_columns))
 
-# Add any other columns from the original template that aren't yet in `final_template`
-all_template_cols <- colnames(template_brainage)
-missing_in_final <- setdiff(all_template_cols, colnames(final_template))
-
-if (length(missing_in_final) > 0) {
-  final_template[missing_in_final] <- NA
+# Verify that all target columns are present in the final data
+columns_not_present_in_final <- setdiff(final_target_columns, colnames(final_template))
+if(length(columns_not_present_in_final) == 0){
+  message("All target columns from template_brainage are present in final_template.")
+} else {
+  warning(paste("The following target columns are still missing from final_template:", 
+                paste(columns_not_present_in_final, collapse = ", ")))
 }
 
-# Reorder final_template columns to match the original template_brainage order
-final_template <- final_template[, all_template_cols]
+# Display first few rows of the prepared data for review
+print("--- Head of final_template (before final numeric conversion and ID removal for calculator) ---")
+print(head(final_template))
+
+print("--- Column names of final_template ---")
+print(colnames(final_template))
 ```
 
-# Output a .csv file that contains the subject ID and the age so that they can be used for the analysis after
-
-```{r}
-sex <- "female"  # Define sex variable
-
-output_csv_file <- paste0("../data/processed/", tolower(sex), "_subID_developmental_template.csv")
-write.csv(final_template, file = output_csv_file, row.names = FALSE)
-
-```
-
-# Change all the data types to numeric and remove the first column of the subject ids because that was not in the original template. 
-```{r}
-# Store first column (subject IDs)
-first_column <- final_template[, 1]
-
-# Remove ID column and convert rest to numeric
-numeric_data <- final_template %>%
-  select(-all_of(id_col)) %>%
-  mutate(across(everything(), ~ suppressWarnings(as.numeric(.))))
-```
-
-# Save the final populated template into a new Excel file
-```
+# Output processed data
 ```{r}
 # Define output directory and ensure path is expanded
 output_dir <- path.expand("~/Developmental_BrainAGE/output/")
 
-# Create output file path
-output_file <- paste0(output_dir, tolower(sex), "_populated_developmental_template.xlsx")
+# Ensure output directory exists
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+# Output a .csv file that contains the subject ID and the age (for reference)
+# This includes the `clean_subject_id` column.
+output_csv_file <- paste0(output_dir, tolower(sex_filter), "_subID_developmental_template.csv")
+write_csv(final_template, file = output_csv_file)
+print(paste("Data with subject IDs saved as:", output_csv_file))
+
+# Prepare data for the BrainAGE calculator: remove subject IDs and convert all to numeric.
+# The template_brainage.xlsx does NOT have a subject ID column.
+numeric_data_for_calculator <- final_template %>%
+  # Select only columns that are *also* in the original template_brainage (excluding ID)
+  select(all_of(colnames(template_brainage))) %>%
+  # Convert everything to numeric. Suppress warnings for NA coercion (e.g., if a column was all NA)
+  mutate(across(everything(), ~ suppressWarnings(as.numeric(as.character(.))))) # Convert to char first to avoid issues with some types
+
+# Define output Excel file path
+output_excel_file <- paste0(output_dir, tolower(sex_filter), "_populated_developmental_template.xlsx")
 
 # Write the Excel file
-write.xlsx(numeric_data, output_file)
+write.xlsx(numeric_data_for_calculator, output_excel_file)
 
 # Print confirmation with full path
-print(paste("Template has been populated and saved as", output_file))
+print(paste("Template has been populated and saved as", output_excel_file))
+
+print("Script finished successfully. Please check the output directory for your files.")
 ```
+
 
