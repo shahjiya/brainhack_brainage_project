@@ -12,6 +12,7 @@ library(openxlsx)
 library(stringr)
 library(dplyr)
 library(readr)
+library(xgb)
 ```
 
 ## R Markdown
@@ -220,5 +221,11 @@ length(common_cols)
 
 # (Optional) Print which columns match
 print(common_cols)
+```
+```{r}
+#remove subject Id column
+features_females <- final_template[, !(names(final_template) %in% "clean_subject_id")]
+
+print(features_females)
 ```
 
