@@ -35,7 +35,10 @@ demographic_df <- read_tsv("~/Data/HBN_BIDS/study-HBN_desc-participants.tsv")
 ```
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 ```{r}
@@ -49,8 +52,11 @@ clean_subject_ids_tsv <- function(df) {
 brainmeasures_clean <- clean_subject_ids_tsv(combined_brainmeasures)
 glassr_clean <- clean_subject_ids_tsv(glassr_output)
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
 
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 ```
@@ -70,6 +76,7 @@ colnames(glassr_clean) <- colnames(glassr_clean) %>%
 
 ```{r}
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 # 1. Get the column name (which is also a feature)
 col_header <- colnames(feature_names)[1]
 
@@ -84,6 +91,8 @@ column_names <- c("clean_subject_id", all_features)
 
 # 5. Create empty dataframe
 =======
+=======
+>>>>>>> Stashed changes
 # Assume feature_names is a vector or single-column data frame
 column_names <- feature_names[[1]]  # extract the vector of names
 
@@ -91,6 +100,9 @@ column_names <- feature_names[[1]]  # extract the vector of names
 column_names <- c("clean_subject_id", column_names)
 
 # Create an empty dataframe with those column names and 0 rows
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 wide_structures <- data.frame(matrix(nrow = 0, ncol = length(column_names)))
 colnames(wide_structures) <- column_names
@@ -99,7 +111,10 @@ colnames(wide_structures) <- column_names
 print(wide_structures)
 ```
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 ```{r}
@@ -120,6 +135,7 @@ print(gendered_glassr_data)
 ## Rename the brainmeasures to match the templates
 
 ```{r}
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 brainmeasures_renamed <- brainmeasures_clean %>%
   rename(
@@ -164,6 +180,8 @@ brainmeasures_renamed <- brainmeasures_clean %>%
   )
 
 =======
+=======
+>>>>>>> Stashed changes
 # Define structure name mapping
 structure_map <- c(
   "Left_Lateral_Ventricle" = "Left.Lateral.Ventricle",
@@ -253,6 +271,9 @@ rename_columns_no_duplicates <- function(cols, map) {
 # Apply renaming to your dataframe
 brainmeasures_renamed <- brainmeasures_clean
 colnames(brainmeasures_renamed) <- rename_columns_no_duplicates(colnames(brainmeasures_clean), structure_map)
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
 ```
@@ -275,6 +296,11 @@ gendered_brainmeasure_data$clean_subject_id <- as.character(gendered_brainmeasur
 if (nrow(wide_structures) == 0) {
   # Create an empty data frame with the same structure as template_df but add the subject IDs and age
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+  # Keep all the original columns, but add the new data
+  wide_structures <- wide_structures[0, ]  # Retain column structure but no rows
+>>>>>>> Stashed changes
 =======
   # Keep all the original columns, but add the new data
   wide_structures <- wide_structures[0, ]  # Retain column structure but no rows
@@ -285,9 +311,12 @@ if (nrow(wide_structures) == 0) {
                          stringsAsFactors = FALSE)
   
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   new_data$clean_subject_id <- as.character(new_data$clean_subject_id)
   wide_structures$clean_subject_id <- as.character(wide_structures$clean_subject_id)
   
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
   # Bind the new data to the empty template, ensuring columns remain intact
@@ -301,6 +330,7 @@ print(wide_structures)
 ```
 
 
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 ```{r}
 # Convert all columns in the template_df to characters
@@ -350,10 +380,16 @@ print(features_females)
 ```
 
 =======
+=======
+>>>>>>> Stashed changes
 # Check if subject IDs from both dataframes match
 
 ```{r}
 common_ids <- intersect(template_df$clean_subject_id, gendered_lh_thickness_data$clean_subject_id)
 print(paste("Number of matching subject IDs:", length(common_ids)))
+<<<<<<< Updated upstream
+```
+>>>>>>> Stashed changes
+=======
 ```
 >>>>>>> Stashed changes
