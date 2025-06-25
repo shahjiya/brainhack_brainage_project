@@ -49,7 +49,10 @@ mv ~/Downloads/rh.Schaefer2018_400Parcels.*.tsv Developmental_BrainAGE/Freesurfe
 # Change sex to "Male" or "Female" depending on analysis.
 
 # Filter for Sex ('Male' or 'Female')
+
+```{r}
 sex <- "Female"
+```
 
 ```{r}
 # Set working directory to main project folder before running this script
