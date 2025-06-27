@@ -231,5 +231,23 @@ print(common_cols)
 features_females <- final_template[, !(names(final_template) %in% "clean_subject_id")]
 
 print(features_females)
+
+```
+# Save the final populated template into a new Excel file
+
+```{r}
+
+output_file <- paste0("~/Data/processed/features_females.csv")
+write.csv(features_females, output_file)
+
+print(paste("Template has been populated and saved as", output_file))
+```
+
+```{r}
+features_females <- read_csv("/KIMEL/tigrlab/scratch/jshah/features_females (1).csv")
+features_females <- features_females[, -1]
+load("/external/rprshnas01/tigrlab/scratch/jshah/brainage/brainageModels.RData")
+brainAge_females <- predict(mdl_agepred_female, as.matrix(features_females))
+print(brainAGE_females)
 ```
 
