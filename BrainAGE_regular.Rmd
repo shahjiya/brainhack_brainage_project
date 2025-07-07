@@ -28,136 +28,70 @@ Change sex to "Male" or "Female" depending on analysis.
 
 ```{r}
 #Load excel file
-template_brainage <- read_excel("/data/raw/brainAGE_template.xlsx")
+template_brainage <- read_excel("~/Data/raw/brainAGE_template.xlsx")
 
 sex <- "Female"
 
-#Load Aseg file
-aseg_data <- read_tsv("/data/raw/00_group2_stats_tables/aseg.tsv")
+#Load Aseg file (or equivalent)
+aseg_data <- read_csv("~/Data/raw/combined_brainmeasures.csv")
 
-#Load thickness file
-thickness_data <- read_csv("/data/processed/thickness_data.csv")
-
-#Load surface area file
-surfacearea_data <- read_csv("/data/processed/surfacearea_data.csv")
+#Load Aparc file
+aparc_data <- read_csv("~/Data/raw/aparc_wide.csv")
 
 #Load demographics file
-TAY_demographics <- read_csv("/data/raw/tay_mri_demo_summer2024.csv")
+demographics <- read_tsv("~/Data/raw/study-HBN_desc-participants.tsv")
 ```
 
 Function to clean and standardize subject IDs for the aseg, surface area, and thickness data. 
 
 ```{r}
-#save the original column names
-original_template_column_names <- colnames(template_brainage)
+standardize_aseg_columns <- function(df) {
+    col_names <- colnames(df)
 
-clean_subject_ids_tsv <- function(df) {
-  colnames(df)[1] <- "clean_subject_id"  # Rename the first column to 'clean_subject_id'
-  df %>%
-    mutate(clean_subject_id = str_extract(clean_subject_id, "[0-9]{8}$"))  # Extract the last 8 digits of subject IDs
-}
-
-aseg_data_clean <- clean_subject_ids_tsv(aseg_data)
-thickness_data_clean <- clean_subject_ids_tsv(thickness_data)
-surfacearea_data_clean <- clean_subject_ids_tsv(surfacearea_data)
-
-```
-
-Function to clean demographic subject_IDs
-
-```{r}
-clean_subject_ids_demo <- function(df, subject_id) {
-  df %>%
-    mutate(clean_subject_id = str_extract(!!sym(subject_id), "[0-9]{8}$"))
-}
-
-TAY_demographics <- clean_subject_ids_demo(TAY_demographics, "subject_id")
-
-```
-
-Rename subject_id to clean_subject_id in the demographic file (to standardize the column name)
-
-```{r}
-template_df <- template_brainage %>%
-  rename(clean_subject_id = SubjectID)
-```
-
-standardize column names for the thickness and surface area data. Need to change names of the some of the variables to match the template file. 
-
-```{r}
-standardize_col_names <- function(col_names, suffix) {
-  # Standardize 'left_' and 'l_' to 'left_', and 'right_' and 'r_' to 'right_'
-  col_names <- str_replace(col_names, "^left_", "L_")
-  col_names <- str_replace(col_names, "^right_", "R_")
-  col_names <- str_replace(col_names, "entorhinal", "entorhil")
-  col_names <- str_replace(col_names, "supramarginal", "supramargil")
-  
-  # Ensure all columns have the appropriate suffix
-  col_names <- ifelse(!str_detect(col_names, paste0("_", suffix, "$")),
-                      paste0(col_names, "_", suffix),
-                      col_names)
-  return(col_names)
-}
-
-colnames(thickness_data_clean) <- standardize_col_names(colnames(thickness_data_clean), "thickavg")
-
-thickness_data_clean <- thickness_data_clean %>%
-  rename(clean_subject_id = clean_subject_id_thickavg)
-
-colnames(surfacearea_data_clean) <- standardize_col_names(colnames(surfacearea_data_clean), "surfavg")
-
-surfacearea_data_clean <- surfacearea_data_clean %>%
-  rename(clean_subject_id = clean_subject_id_surfavg)
-
-```
-
-Standardize the aseg column names to match the template column
-
-```{r}
-standardize_aseg_columns <- function(col_names) {
   # Replace full names with abbreviations for hippocampus and thalamus
-  col_names <- str_replace(col_names, "Thalamus-Proper", "thal")
-  col_names <- str_replace(col_names, "Left-", "L")
-  col_names <- str_replace(col_names, "Right-", "R")
-  col_names <- str_replace_all(col_names, "-", "")
-  col_names <- str_replace(col_names, "Hippocampus", "hippo")
-  col_names <- str_replace(col_names, "Caudate", "caud")
-  col_names <- str_replace(col_names, "Putamen", "put")
-  col_names <- str_replace(col_names, "Pallidum", "pal")
-  col_names <- str_replace(col_names, "Amygdala", "amyg")
-  col_names <- str_replace(col_names, "Accumbensarea", "accumb")
-    
+  col_names <- str_replace(col_names, "Left_Thalamus_Proper_Volume_mm3", "Lthal")
+  col_names <- str_replace(col_names, "Left_Caudate_Volume_mm3", "Lcaud")
+  col_names <- str_replace(col_names, "Left_Putamen_Volume_mm3", "Lput")
+  col_names <- str_replace_all(col_names, "Left_Pallidum_Volume_mm3", "Lpal")
+  col_names <- str_replace_all(col_names, "Left_Hippocampus_Volume_mm3", "Lhippo")
+  col_names <- str_replace_all(col_names, "Left_Amygdala_Volume_mm3", "Lamyg")
+  col_names <- str_replace_all(col_names, "Left_Accumbens_area_Volume_mm3", "Laccumb")
   
-  return(col_names)
+  col_names <- str_replace(col_names, "Right_Thalamus_Proper_Volume_mm3", "Rthal")
+  col_names <- str_replace(col_names, "Right_Caudate_Volume_mm3", "Rcaud")
+  col_names <- str_replace(col_names, "Right_Putamen_Volume_mm3", "Rput")
+  col_names <- str_replace_all(col_names, "Right_Pallidum_Volume_mm3", "Rpal")
+  col_names <- str_replace_all(col_names, "Right_Hippocampus_Volume_mm3", "Rhippo")
+  col_names <- str_replace_all(col_names, "Right_Amygdala_Volume_mm3", "Ramyg")
+  col_names <- str_replace_all(col_names, "Right_Accumbens_area_Volume_mm3", "Raccumb")
+  
+  colnames(df) <- col_names  
+  return(df)
 }
 
-colnames(aseg_data_clean) <- standardize_aseg_columns(colnames(aseg_data_clean))
+aseg_renamed <- standardize_aseg_columns(aseg_data_clean)
 
 ```
+
 
 First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output). Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
 
 ```{r}
 
-gendered_data <- TAY_demographics %>%
-  filter(time_point == "01") %>%  # First filter for the desired time_point
-  filter(assigned_sex_at_birth == sex) %>%  # Then filter for sex
-  select(clean_subject_id, age_scan, assigned_sex_at_birth)  # Keep subject ID, age, and sex for merging
+gendered_data <- demographics_df %>%
+  filter(sex == "Female") %>%  # Then filter for sex
+  select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
 
 ```
 
 Filter the aseg data for the sex
 
 ```{r}
-gendered_aseg_data_clean <- aseg_data_clean %>%
+gendered_aseg_data_clean <- aseg_renamed %>%
   filter(clean_subject_id %in% gendered_data$clean_subject_id)
 
-gendered_surfacearea_data_clean <- surfacearea_data_clean %>%
+gendered_aparc_data_clean <- aparc_renamed %>%
   filter(clean_subject_id %in% gendered_data$clean_subject_id)
-
-gendered_thickness_data_clean <- thickness_data_clean %>%
-  filter(clean_subject_id %in% gendered_data$clean_subject_id)
-
 ```
 
 Add the sex specific subject_ID, age, and assigned sex to the template_df and this also ensures that there are enough rows to merge the data. 
@@ -177,8 +111,8 @@ if (nrow(template_df) == 0) {
   
   # Now create a new data frame that only updates clean_subject_id and AGE
   new_data <- data.frame(clean_subject_id =gendered_data$clean_subject_id,
-                         age = gendered_data$age_scan,
-                         sex = gendered_data$assigned_sex_at_birth,
+                         age = gendered_data$age,
+                         sex = gendered_data$sex,
                          stringsAsFactors = FALSE)
   
   # Make them the same data type
@@ -192,7 +126,7 @@ if (nrow(template_df) == 0) {
   
   # If template_df already has rows, just update clean_subject_id and AGE columns
   template_df$clean_subject_id <- gendered_data$clean_subject_id
-  template_df$AGE <- gendered_data$age_scan
+  template_df$age <- gendered_data$age
 }
 ```
 
@@ -226,10 +160,7 @@ template_df <- template_df %>%
 gendered_aseg_data_clean <- gendered_aseg_data_clean %>%
   mutate(across(everything(), as.character))
 
-gendered_thickness_data_clean <- gendered_thickness_data_clean %>%
-  mutate(across(everything(), as.character))
-
-gendered_surfacearea_data_clean <- gendered_surfacearea_data_clean %>%
+gendered_aparc_data_clean <- gendered_aparc_data_clean %>%
   mutate(across(everything(), as.character))
 
 ```
@@ -238,8 +169,7 @@ Populate the template df by joining the aseg, surface area, and thickness data.
 
 ```{r}
 final_template <- left_join(template_df[, c(1, 2, 3, 4, 5, 6)], gendered_aseg_data_clean, by = "clean_subject_id") %>%  
-  left_join(gendered_surfacearea_data_clean, by = "clean_subject_id") %>%
-  left_join(gendered_thickness_data_clean, by = "clean_subject_id") 
+  left_join(gendered_aparc_data_clean, by = "clean_subject_id") 
 
 # Select only the columns from template_df
 final_template <- final_template %>%
@@ -248,11 +178,6 @@ final_template <- final_template %>%
 #remove columns with NA
 final_template <- final_template %>%
   filter(!is.na(final_template[[7]]))
-
-#remove participant 00000020
-
-final_template <- final_template %>%
-  filter(clean_subject_id != "00000020")
 
 #Revert back to original column names found in the template
 colnames(final_template)[1:length(original_template_column_names)] <- original_template_column_names
@@ -264,8 +189,9 @@ Make sure all the data types are numeric because the calculator will not work if
 ```{r}
 
 # Convert all other rows and columns to numeric
+
 numeric_data <- final_template %>%
-  mutate_at(vars(-4), ~ as.numeric(as.character(.)))
+  mutate(across(-c(SubjectID, sex), ~ as.numeric(.)))
 
 ```
 
@@ -273,7 +199,7 @@ Save the final populated template into a new Excel file
 
 ```{r}
 
-output_file <- paste0("../data/processed/", tolower(sex), "_populated_brainAGE_template.xlsx")
+output_file <- paste0("~/Data/processed/", tolower(sex), "_populated_brainAGE_template.xlsx")
 write.xlsx(numeric_data, output_file)
 
 print(paste("Template has been populated and saved as", output_file))
