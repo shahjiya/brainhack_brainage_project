@@ -47,7 +47,7 @@ find . -name "*brainmeasures.tsv" -exec cp {} HBN_tsv/brainmeasures_tsv/ \;
 library(tidyverse)
 
 # Set the directory containing the .tsv files
-brainmeasures_tsv_dir <- "/Data/HBN_tsv/brainmeasures_tsv"
+brainmeasures_tsv_dir <- "~/Data/HBN_tsv/brainmeasures_tsv"
 
 # List all .tsv files
 brainmeasures_tsv_files <- list.files(brainmeasures_tsv_dir, pattern = "\\.tsv$", full.names = TRUE)
@@ -59,14 +59,14 @@ combined_df <- map_df(brainmeasures_tsv_files, ~ read_tsv(.x, show_col_types = F
 print(combined_df)
 
 # Create a new csv file with the combined data 
-write_csv(combined_df, "/Data/HBN_tsv/combined_brainmeasures.csv")
+write_csv(combined_df, "~/Data/HBN_tsv/combined_brainmeasures.csv")
 
 ```
 ## Create a group tsv file for regional surface data
 
 ```{r}
 # Set the directory containing the .tsv files
-regionsurfacestats_tsv_dir <- "/Data/HBN_tsv/regionsurfacestats_tsv"
+regionsurfacestats_tsv_dir <- "~/Data/HBN_tsv/regionsurfacestats_tsv"
 
 # List all .tsv files
 regionsurfacestats_tsv_files <- list.files(regionsurfacestats_tsv_dir, pattern = "\\.tsv$", full.names = TRUE)

@@ -43,6 +43,31 @@ demographics <- read_tsv("~/Data/raw/study-HBN_desc-participants.tsv")
 ```
 
 Function to clean and standardize subject IDs for the aseg, surface area, and thickness data. 
+```{r}
+#save the original column names
+original_template_column_names <- colnames(template_brainage)
+
+clean_subject_ids_tsv <- function(df) {
+  colnames(df)[1] <- "participant_id"  # Rename the first column
+  df <- df %>%
+    mutate(clean_subject_id = str_remove(participant_id, "^sub-"))  # Remove "sub-" from start
+  return(df)
+}
+
+aseg_data_clean <- clean_subject_ids_tsv(aseg_data)
+aparc_data_clean <- clean_subject_ids_tsv(aparc_data)
+
+```
+
+Rename subject_id to clean_subject_id in the demographic file (to standardize the column name)
+
+```{r}
+template_df <- template_brainage %>%
+  rename(clean_subject_id = SubjectID)
+
+demographics_df <- demographics %>%
+  rename(clean_subject_id = participant_id)
+```
 
 ```{r}
 standardize_aseg_columns <- function(df) {
@@ -73,6 +98,27 @@ aseg_renamed <- standardize_aseg_columns(aseg_data_clean)
 
 ```
 
+standardize column names for the thickness and surface area data. Need to change names of the some of the variables to match the template file. 
+
+```{r}
+standardize_col_names <- function(df) {
+  col_names <- colnames(df)
+  
+  # Standardize prefixes and fix naming typos
+  col_names <- str_replace_all(col_names, "lh", "L")
+  col_names <- str_replace_all(col_names, "rh", "R")
+  col_names <- str_replace_all(col_names, "entorhinal", "entorhil")
+  col_names <- str_replace_all(col_names, "entoRinal", "entorhil")
+  col_names <- str_replace_all(col_names, "supramarginal", "supramargil")
+  col_names <- str_replace_all(col_names, "ThickAvg", "thickavg")
+  col_names <- str_replace_all(col_names, "SurfArea", "surfavg")
+  
+  colnames(df) <- col_names
+  return(df)
+}
+
+aparc_renamed <- standardize_col_names(aparc_data_clean)
+```
 
 First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output). Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
 
