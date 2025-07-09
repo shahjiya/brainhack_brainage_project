@@ -3,7 +3,7 @@ title: "Network_brain_age"
 output: html_notebook
 date: 2024-10-18
 ---
-This is a script to create and populate the Developmental BrainAge template (https://centilebrain.org/#/brainAGE) using freesurfer outputs.
+This is a script to create and populate the Network BrainAge template (https://centilebrain.org/#/brainAGE) using freesurfer outputs.
 
 
 Load the necessary libraries
@@ -21,59 +21,61 @@ Change sex to "Male" or "Female" depending on analysis.
 
 ```{r}
 
-#Load excel file
-template_brainage <- read_excel("../data/raw/Network_BrainAGE_template.xlsx")
+this_sex <- "Female"
 
-sex <- "Male"
+# Load Developmental Network template and demographic data
+template_brainage <- read_excel("~/Data/raw/Network_BrainAGE_template.xlsx")
 
-#Load parcellation files
-lh_thick <- read_tsv("../data/raw/00_group2_stats_tables/lh.Schaefer2018_1000Parcels.thickness.tsv")
-lh_surf <- read_tsv("../data/raw/00_group2_stats_tables/lh.Schaefer2018_1000Parcels.surfacearea.tsv")
+demographics <- read_tsv("~/Data/raw/study-HBN_desc-participants.tsv")
 
-rh_thick <- read_tsv("../data/raw/00_group2_stats_tables/rh.Schaefer2018_1000Parcels.thickness.tsv")
-rh_surf <- read_tsv("../data/raw/00_group2_stats_tables/rh.Schaefer2018_1000Parcels.surfacearea.tsv")
+# Load parcellation files (update path if needed)
+parcellations_1000 <- read_csv("~/Data/raw/Schaefer2018_1000Parcels_7Networks_order_wide.csv")
 
-TAY_demographics <- read_csv("../data/raw/tay_mri_demo_summer2024.csv")
 ```
 
 Function to clean and standardize subject IDs for the thickness and surface area data
 
 ```{r}
-clean_subject_ids_tsv <- function(df) {
-  colnames(df)[1] <- "clean_subject_id"  # Rename the first column to 'clean_subject_id'
-  df %>%
-    mutate(clean_subject_id = str_extract(clean_subject_id, "[0-9]{8}$"))  # Extract the last 8 digits of subject IDs
+# Save the original column names for reference
+original_template_column_names <- colnames(template_brainage)
+
+# Step 2: Define function to standardize suffixes or fix known typos
+standardize_col_names <- function(df) {
+  col_names <- colnames(df)
+  
+  # Standardize suffixes and known naming issues
+  col_names <- str_replace_all(col_names, "ThickAvg", "thickness")
+  col_names <- str_replace_all(col_names, "SurfArea", "area")
+  
+  colnames(df) <- col_names
+  return(df)
 }
+
+parcellations_1000_renamed <- standardize_col_names(parcellations_1000)
+
 ```
 
 Apply the subject_ID cleaning function to thickness and surface area files
 
 ```{r}
-lh_thick_clean <- clean_subject_ids_tsv(lh_thick)
-lh_surf_clean <- clean_subject_ids_tsv(lh_surf)
-rh_thick_clean <- clean_subject_ids_tsv(rh_thick)
-rh_surf_clean <- clean_subject_ids_tsv(rh_surf)
-```
-
-Function to clean demographic subject_IDs
-
-```{r}
-clean_subject_ids_demo <- function(df, subject_id) {
-  df %>%
-    mutate(clean_subject_id = str_extract(!!sym(subject_id), "[0-9]{8}$"))
+clean_subject_ids_tsv <- function(df) {
+  colnames(df)[1] <- "clean_subject_id"  # Rename the first column
+  df <- df %>%
+    mutate(clean_subject_id = str_remove(clean_subject_id, "^sub-"))  # Remove "sub-" from start
+  return(df)
 }
+
+parcellation_1000_clean <- clean_subject_ids_tsv(parcellations_1000_renamed)
 ```
+
 
 Use the function to clean the demographic subject ids
 
 ```{r}
-TAY_demographics <- clean_subject_ids_demo(TAY_demographics, "subject_id")
-```
+demographics_df <- demographics %>%
+  rename(clean_subject_id = participant_id)
 
-Rename subject_id to clean_subject_id in the demographic file (to standardize the column name)
-
-```{r}
-template_df <- template_brainage %>%
+template_df<- template_brainage %>%
   rename(clean_subject_id = SubjectID)
 ```
 
@@ -81,26 +83,16 @@ First filters for time point because we only want baseline scans (also prevents 
 
 ```{r}
 
-gendered_data <- TAY_demographics %>%
-  filter(time_point == "01") %>%  # First filter for the desired time_point
-  filter(assigned_sex_at_birth == sex) %>%  # Then filter for sex
-  select(clean_subject_id, age_scan, assigned_sex_at_birth)  # Keep subject ID, age, and sex for merging
+gendered_data <- demographics_df %>%
+  filter(sex == this_sex) %>%  # Then filter for sex
+  select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
 
 ```
 
 Filter the thickness and area data for female subject IDs -> create function to filter subject_IDs? 
 
 ```{r}
-gendered_lh_thickness_data <- lh_thick_clean %>%
-  filter(clean_subject_id %in% gendered_data$clean_subject_id)
-
-gendered_lh_area_data <- lh_surf_clean %>%
-  filter(clean_subject_id %in% gendered_data$clean_subject_id)
-
-gendered_rh_thickness_data <- rh_thick_clean %>%
-  filter(clean_subject_id %in% gendered_data$clean_subject_id)
-
-gendered_rh_area_data <- rh_surf_clean %>%
+gendered_parcellation <- parcellation_1000_clean %>%
   filter(clean_subject_id %in% gendered_data$clean_subject_id)
 ```
 
@@ -121,8 +113,8 @@ if (nrow(template_df) == 0) {
   
   # Now create a new data frame that only updates clean_subject_id and AGE
   new_data <- data.frame(clean_subject_id =gendered_data$clean_subject_id,
-                         age = gendered_data$age_scan,
-                         sex = gendered_data$assigned_sex_at_birth,
+                         age = gendered_data$age,
+                         sex = gendered_data$sex,
                          stringsAsFactors = FALSE)
   
   # Make them the same data type
@@ -136,7 +128,7 @@ if (nrow(template_df) == 0) {
   
   # If template_df already has rows, just update clean_subject_id and AGE columns
   template_df$clean_subject_id <- gendered_data$clean_subject_id
-  template_df$AGE <- gendered_data$age_scan
+  template_df$age <- gendered_data$age
 }
 
 ```
@@ -165,7 +157,7 @@ for (col in names(default_values)) {
 Check if subject IDs from both dataframes match
 
 ```{r}
-common_ids <- intersect(template_df$clean_subject_id, gendered_lh_thickness_data$clean_subject_id)
+common_ids <- intersect(template_df$clean_subject_id, gendered_parcellation$clean_subject_id)
 print(paste("Number of matching subject IDs:", length(common_ids)))
 ```
 
@@ -177,30 +169,16 @@ Make all of the logical variables into characters
 template_df <- template_df %>%
   mutate(across(everything(), as.character))
 
-gendered_data <- gendered_data %>%
+gendered_parcellation <- gendered_parcellation %>%
   mutate(across(everything(), as.character))
 
-gendered_lh_thickness_data <- gendered_lh_thickness_data %>%
-  mutate(across(everything(), as.character))
-
-gendered_lh_area_data <- gendered_lh_area_data %>%
-  mutate(across(everything(), as.character))
-
-gendered_rh_thickness_data <- gendered_rh_thickness_data %>%
-  mutate(across(everything(), as.character))
-
-gendered_rh_area_data <- gendered_rh_area_data %>%
-  mutate(across(everything(), as.character))
 ```
 
 Populate the template with female subject data and only keep the column names that are in the template. Remove any rows with NA, the calculator will not work if there are any NA values. Then revert back to the original column names. 
 Ensure that all the relevant data is properly merged.
 
 ```{r}
-final_template <- left_join(template_df[, c(1, 2, 3, 4, 5, 6)], gendered_lh_thickness_data, by = "clean_subject_id") %>%  
-  left_join(gendered_lh_area_data, by = "clean_subject_id") %>%
-  left_join(gendered_rh_thickness_data, by = "clean_subject_id") %>%
-  left_join(gendered_rh_area_data, by = "clean_subject_id")
+final_template <- left_join(template_df[, c(1, 2, 3, 4, 5, 6)], gendered_parcellation, by = "clean_subject_id") 
 
 # Select only the columns from template_df
 final_template <- final_template %>%
@@ -210,10 +188,6 @@ final_template <- final_template %>%
 final_template <- final_template %>%
   filter(!is.na(final_template[[7]]))
 
-#remove participant 00000020
-
-final_template <- final_template %>%
-  filter(clean_subject_id != "00000020")
 
 ```
 
@@ -223,7 +197,7 @@ Change all the data types to numeric and remove the first column of the subject 
 
 # Convert all other rows and columns to numeric
 numeric_data <- final_template %>%
-  mutate_at(vars(-4), ~ as.numeric(as.character(.)))
+  mutate_at(vars(-2, -4), ~ as.numeric(as.character(.)))
 
 ```
 
@@ -247,7 +221,7 @@ for (i in 1:num_files) {
     slice(start_row:end_row)
   
   # Create file name for each chunk
-  file_name <- paste0("../data/processed/", tolower(sex), "_network_template_part_", i, ".xlsx")
+  file_name <- paste0("~/Data/processed/", tolower(this_sex), "_network_template_part_", i, ".xlsx")
   
   # Write the chunk to an Excel file, keeping the header row
   write.xlsx(chunked_participants, file_name)

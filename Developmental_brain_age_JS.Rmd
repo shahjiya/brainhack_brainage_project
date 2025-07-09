@@ -25,7 +25,7 @@ library(readr)
 # Filter for Sex ('Male' or 'Female')
 
 ```{r}
-sex <- "Female"
+this_sex <- "Female"
 ```
 
 ```{r}
@@ -117,7 +117,7 @@ demographics_df <- demographics %>%
 ```{r}
 
 gendered_data <- demographics_df %>%
-  filter(sex == "Female") %>%  # Then filter for sex
+  filter(sex == this_sex) %>%  # Then filter for sex
   select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
 
 ```
