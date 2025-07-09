@@ -30,7 +30,7 @@ Change sex to "Male" or "Female" depending on analysis.
 #Load excel file
 template_brainage <- read_excel("~/Data/raw/brainAGE_template.xlsx")
 
-sex <- "Female"
+this_sex <- "Female"
 
 #Load Aseg file (or equivalent)
 aseg_data <- read_csv("~/Data/raw/combined_brainmeasures.csv")
@@ -125,7 +125,7 @@ First filters for time point because we only want baseline scans (also prevents 
 ```{r}
 
 gendered_data <- demographics_df %>%
-  filter(sex == "Female") %>%  # Then filter for sex
+  filter(sex == this_sex) %>%  # Then filter for sex
   select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
 
 ```

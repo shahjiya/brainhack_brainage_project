@@ -1,0 +1,455 @@
+---
+title: "centile_brain_subvol"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Overview
+
+This R Markdown script processes neuroimaging outputs and populates CentileBrain templates (https://centilebrain.org/#/model) based on freesurfer data.
+
+Files and columns are standardized for RBC conventions..
+
+
+```{r cars}
+# Load Required Packages
+
+library(readxl)
+library(openxlsx)
+library(stringr)
+library(dplyr)
+library(readr)
+```
+
+## Import the necessary files
+
+This is for all of the centile brain centile scores. 
+
+```{r pressure, echo=FALSE}
+#Load template excel file
+template_subvol_fem <- read_excel("~/Data/raw/subcortical-volume-female.xlsx")
+template_subvol_male <- read_excel("~/Data/raw/subcortical-volume-male.xlsx")
+template_thick_fem <- read_excel("~/Data/raw/cortical-thickness-female.xlsx")
+template_thick_male <- read_excel("~/Data/raw/cortical-thickness-male.xlsx")
+template_area_fem <- read_excel("~/Data/raw/surface-area-female.xlsx")
+template_area_male <- read_excel("~/Data/raw/surface-area-male.xlsx")
+
+# Assigning variables for sex
+sex_female <- "Female"
+
+sex_male <- "Male"
+
+#Load Aseg file (or equivalent)
+aseg_data <- read_csv("~/Data/raw/combined_brainmeasures.csv")
+
+#Load Aparc file
+aparc_data <- read_csv("~/Data/raw/aparc_wide.csv")
+
+#Load demographics file
+demographics <- read_tsv("~/Data/raw/study-HBN_desc-participants.tsv")
+```
+
+#Function to clean demographic subject_IDs and then rename subject_id to participant_id
+
+```{r}
+#save the original column names
+original_template_area_fem <- colnames(template_area_fem)
+original_template_area_male <- colnames(template_area_male)
+original_template_subvol_fem <- colnames(template_subvol_fem)
+original_template_subvol_male <- colnames(template_subvol_male)
+original_template_thick_fem <- colnames(template_thick_fem)
+original_template_thick_male <- colnames(template_thick_male)
+
+clean_subject_ids_tsv <- function(df) {
+  colnames(df)[1] <- "participant_id"  # Rename the first column
+  df <- df %>%
+    mutate(clean_subject_id = str_remove(participant_id, "^sub-"))  # Remove "sub-" from start
+  return(df)
+}
+
+aseg_data_clean <- clean_subject_ids_tsv(aseg_data)
+aparc_data_clean <- clean_subject_ids_tsv(aparc_data)
+
+#Clean demographic subject IDS
+template_area_fem <- template_area_fem %>%
+  rename(clean_subject_id = SubjectID)
+template_area_male <- template_area_male %>%
+  rename(clean_subject_id = SubjectID)
+template_subvol_fem <- template_subvol_fem %>%
+  rename(clean_subject_id = SubjectID)
+template_subvol_male <- template_subvol_male %>%
+  rename(clean_subject_id = SubjectID)
+template_thick_fem <- template_thick_fem %>%
+  rename(clean_subject_id = SubjectID)
+template_thick_male <- template_thick_male %>%
+  rename(clean_subject_id = SubjectID)
+
+demographics_df <- demographics %>%
+  rename(clean_subject_id = participant_id)
+
+```
+
+#Standardize Brain Region Column Names
+## Need to change names of the some of the variables to match the template file. 
+
+```{r}
+standardize_aseg_columns <- function(df) {
+    col_names <- colnames(df)
+
+  # Replace full names with abbreviations for hippocampus and thalamus
+  col_names <- str_replace(col_names, "Left_Thalamus_Proper_Volume_mm3", "Lthal")
+  col_names <- str_replace(col_names, "Left_Caudate_Volume_mm3", "Lcaud")
+  col_names <- str_replace(col_names, "Left_Putamen_Volume_mm3", "Lput")
+  col_names <- str_replace_all(col_names, "Left_Pallidum_Volume_mm3", "Lpal")
+  col_names <- str_replace_all(col_names, "Left_Hippocampus_Volume_mm3", "Lhippo")
+  col_names <- str_replace_all(col_names, "Left_Amygdala_Volume_mm3", "Lamyg")
+  col_names <- str_replace_all(col_names, "Left_Accumbens_area_Volume_mm3", "Laccumb")
+  
+  col_names <- str_replace(col_names, "Right_Thalamus_Proper_Volume_mm3", "Rthal")
+  col_names <- str_replace(col_names, "Right_Caudate_Volume_mm3", "Rcaud")
+  col_names <- str_replace(col_names, "Right_Putamen_Volume_mm3", "Rput")
+  col_names <- str_replace_all(col_names, "Right_Pallidum_Volume_mm3", "Rpal")
+  col_names <- str_replace_all(col_names, "Right_Hippocampus_Volume_mm3", "Rhippo")
+  col_names <- str_replace_all(col_names, "Right_Amygdala_Volume_mm3", "Ramyg")
+  col_names <- str_replace_all(col_names, "Right_Accumbens_area_Volume_mm3", "Raccumb")
+  
+  col_names <- str_replace_all(col_names, "EstimatedTotalIntraCranialVol_eTIV", "ICV")
+  col_names <- str_replace_all(col_names, "Cortex_MeanThickness_rh", "RThickness")
+  col_names <- str_replace_all(col_names, "Cortex_MeanThickness_lh", "LThickness")
+  col_names <- str_replace_all(col_names, "Cortex_PialSurfArea_rh", "RSurfArea")
+  col_names <- str_replace_all(col_names, "Cortex_PialSurfArea_lh", "LSurfArea")
+
+  colnames(df) <- col_names  
+  return(df)
+}
+
+standardize_col_names <- function(df) {
+  col_names <- colnames(df)
+  
+  # Standardize prefixes and fix naming typos
+  col_names <- str_replace_all(col_names, "lh", "L")
+  col_names <- str_replace_all(col_names, "rh", "R")
+  col_names <- str_replace_all(col_names, "entorhinal", "entorhil")
+  col_names <- str_replace_all(col_names, "entoRinal", "entorhil")
+  col_names <- str_replace_all(col_names, "supramarginal", "supramargil")
+  col_names <- str_replace_all(col_names, "ThickAvg", "thickavg")
+  col_names <- str_replace_all(col_names, "SurfArea", "surfavg")
+  
+  colnames(df) <- col_names
+  return(df)
+}
+
+aseg_renamed <- standardize_aseg_columns(aseg_data_clean)
+aparc_renamed <- standardize_col_names(aparc_data_clean)
+
+```
+
+
+1. This First filters for time point because we only want baseline scans (also prevents duplicate subject_IDs in the final output)
+
+2. Then filters for sex and then creates a dataframe with subject Id, age, and sex. 
+
+```{r}
+#Split demographics by Sex and Filter
+
+female_data <- demographics_df %>%
+  filter(sex == sex_female) %>%  # Then filter for sex
+  select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
+
+male_data <- demographics_df %>%
+  filter(sex == sex_male) %>%  # Then filter for sex
+  select(clean_subject_id, age, sex)  # Keep subject ID, age, and sex for merging
+
+```
+
+Filter the aseg data for sex
+
+```{r}
+# Filter raw data by clean IDs
+female_aseg_data_clean <- aseg_renamed %>%
+  filter(clean_subject_id %in% female_data$clean_subject_id)
+
+female_aparc_data_clean <- aparc_renamed %>%
+  filter(clean_subject_id %in% female_data$clean_subject_id)
+
+male_aseg_data_clean <- aseg_renamed %>%
+  filter(clean_subject_id %in% male_data$clean_subject_id)
+
+male_aparc_data_clean <- aparc_renamed %>%
+  filter(clean_subject_id %in% male_data$clean_subject_id)
+
+```
+
+# Add the sex specific subject_ID, age, and sex to the template_df
+## This also ensures that there are enough rows to merge the data. 
+
+```{r}
+#Fill template with subject info
+
+update_template <- function(template_df, gendered_data) {
+  # Ensure input types are correct
+  template_df$clean_subject_id <- as.character(template_df$clean_subject_id)
+  template_df$sex <- as.character(template_df$sex)
+  template_df$age <- as.character(template_df$age)
+
+  # Check if template_df is empty
+  if (nrow(template_df) == 0) {
+    # Create an empty data frame with the same structure as template_df
+    template_df <- template_df[0, ]  # Retain column structure but no rows
+    
+    # Create a new data frame from gendered_data with required columns
+    new_data <- data.frame(
+      clean_subject_id = gendered_data$clean_subject_id,
+      age = gendered_data$age,
+      sex = gendered_data$sex,
+      stringsAsFactors = FALSE
+    )
+    
+    # Ensure consistent data types
+    new_data$clean_subject_id <- as.character(new_data$clean_subject_id)
+    new_data$sex <- as.character(new_data$sex)
+    new_data$age <- as.character(new_data$age)
+    
+    # Combine the new data into the empty template
+    template_df <- bind_rows(template_df, new_data)
+  } else {
+    # If template_df has rows, update columns directly
+    template_df$clean_subject_id <- gendered_data$clean_subject_id
+    template_df$age <- gendered_data$age
+  }
+  
+  # Return the updated template
+  return(template_df)
+}
+
+# Example application for one template
+template_subvol_fem <- update_template(template_df = template_subvol_fem, gendered_data = female_data)
+template_thick_fem <- update_template(template_df = template_thick_fem, gendered_data = female_data)
+template_area_fem <- update_template(template_df = template_area_fem, gendered_data = female_data)
+
+template_subvol_male <- update_template(template_df = template_subvol_male, gendered_data = male_data)
+template_thick_male <- update_template(template_df = template_thick_male, gendered_data = male_data)
+template_area_male <- update_template(template_df = template_area_male, gendered_data = male_data)
+
+```
+
+Add the default values for the SITE (1 because they were all taken at the same site on the same scanner), ScannerType, and FreeSurfer_Version. Change values if needed. 
+
+```{r}
+
+# Create a named list of default values for columns with missing data
+default_values <- list(
+  SITE = "1",
+  Vendor = "GE",
+  FreeSurfer_Version = "7"
+)
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_subvol_fem)) {
+    template_subvol_fem[[col]] <- ifelse(is.na(template_subvol_fem[[col]]), default_values[[col]], template_subvol_fem[[col]])
+  }
+}
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_subvol_male)) {
+    template_subvol_male[[col]] <- ifelse(is.na(template_subvol_male[[col]]), default_values[[col]], template_subvol_male[[col]])
+  }
+}
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_thick_fem)) {
+    template_thick_fem[[col]] <- ifelse(is.na(template_thick_fem[[col]]), default_values[[col]], template_thick_fem[[col]])
+  }
+}
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_thick_male)) {
+    template_thick_male[[col]] <- ifelse(is.na(template_thick_male[[col]]), default_values[[col]], template_thick_male[[col]])
+  }
+}
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_area_fem)) {
+    template_area_fem[[col]] <- ifelse(is.na(template_area_fem[[col]]), default_values[[col]], template_area_fem[[col]])
+  }
+}
+
+# Update existing columns with default values if they are NA
+for (col in names(default_values)) {
+  if (col %in% names(template_area_male)) {
+   template_area_male[[col]] <- ifelse(is.na(template_area_male[[col]]), default_values[[col]], template_area_male[[col]])
+  }
+}
+
+```
+
+Convert all the columns from the files that need to be merged to characters so that they can be merged.
+
+```{r}
+
+# Convert all columns in the template_df to characters
+template_subvol_fem <- template_subvol_fem %>%
+  mutate(across(everything(), as.character))
+
+template_subvol_male <- template_subvol_male %>%
+  mutate(across(everything(), as.character))
+
+template_thick_fem <- template_thick_fem %>%
+  mutate(across(everything(), as.character))
+
+template_thick_male <- template_thick_male %>%
+  mutate(across(everything(), as.character))
+
+template_area_fem <- template_area_fem %>%
+  mutate(across(everything(), as.character))
+
+template_area_male <- template_area_male %>%
+  mutate(across(everything(), as.character))
+
+male_aseg_data_clean <- male_aseg_data_clean %>%
+  mutate(across(everything(), as.character))
+
+female_aseg_data_clean <- female_aseg_data_clean %>%
+  mutate(across(everything(), as.character))
+
+male_aparc_data_clean <- male_aparc_data_clean %>%
+  mutate(across(everything(), as.character))
+
+female_aparc_data_clean <- female_aparc_data_clean %>%
+  mutate(across(everything(), as.character))
+
+
+```
+
+Populate the template df by joining the aseg, surface area, and thickness data. 
+
+```{r}
+process_template <- function(template_df, primary_data_clean, secondary_data_clean = NULL) {
+  # Step 1: Join with primary data
+  final_template <- left_join(template_df[, c(1, 2, 3, 4, 5, 6)],
+                              primary_data_clean, by = "clean_subject_id")
+
+  # Step 2 (optional): Join with secondary data if provided
+  if (!is.null(secondary_data_clean)) {
+    final_template <- left_join(final_template, secondary_data_clean, by = "clean_subject_id")
+  }
+
+  # Step 3: Keep only the original template columns (preserving structure)
+  final_template <- final_template %>%
+    select(any_of(names(template_df)))  # any_of prevents error if column is missing
+
+  return(final_template)
+}
+
+
+final_subvol_fem <- process_template(template_subvol_fem, female_aseg_data_clean)
+final_subvol_male <- process_template(template_subvol_male, male_aseg_data_clean)
+# For thickness data, also merge with surface area data
+final_thick_fem <- process_template(template_thick_fem, 
+                                    female_aparc_data_clean, female_aseg_data_clean)
+final_thick_male <- process_template(template_thick_male, 
+                                     male_aparc_data_clean, male_aseg_data_clean)
+# For surfacearea data, also merge with surface area data
+final_area_fem <- process_template(template_area_fem, 
+                                    female_aparc_data_clean, female_aseg_data_clean)
+final_area_male <- process_template(template_area_male, 
+                                     male_aparc_data_clean, male_aseg_data_clean)
+```
+
+```{r}
+#Revert back to original column names found in the template
+colnames(final_area_fem)[1:length(original_template_area_fem)] <- original_template_area_fem
+
+#Revert back to original column names found in the template
+colnames(final_area_male)[1:length(original_template_area_male)] <- original_template_area_male
+
+#Revert back to original column names found in the template
+colnames(final_subvol_fem)[1:length(original_template_subvol_fem)] <- original_template_subvol_fem
+
+#Revert back to original column names found in the template
+colnames(final_subvol_male)[1:length(original_template_subvol_male)] <- original_template_subvol_male
+
+#Revert back to original column names found in the template
+colnames(final_thick_fem)[1:length(original_template_thick_fem)] <- original_template_thick_fem
+
+#Revert back to original column names found in the template
+colnames(final_thick_male)[1:length(original_template_thick_male)] <- original_template_thick_male
+```
+
+
+```{r}
+final_subvol_fem <- na.omit(final_subvol_fem)
+final_subvol_male <- na.omit(final_subvol_male)
+final_thick_fem <- na.omit(final_thick_fem)
+final_thick_male <- na.omit(final_thick_male)
+final_area_fem <- na.omit(final_area_fem)
+final_area_male <- na.omit(final_area_male)
+
+```
+
+
+```{r}
+
+# Convert all other rows and columns to numeric
+numeric_subvol_fem <- final_subvol_fem %>%
+  mutate_at(vars(-c(2, 3, 6)), ~ as.numeric(as.character(.)))
+
+numeric_thick_fem <- final_thick_fem %>%
+  mutate_at(vars(-c(2, 3, 6)), ~ as.numeric(as.character(.)))
+
+numeric_area_fem <- final_area_fem %>%
+  mutate_at(vars(-c(2, 3, 6)), ~ as.numeric(as.character(.)))
+
+numeric_subvol_male <- final_subvol_male %>%
+  mutate_at(vars(-c(2, 3, 6)), ~ as.numeric(as.character(.)))
+
+numeric_thick_male <- final_thick_male %>%
+  mutate_at(vars(-c(2, 3, 6)), ~ as.numeric(as.character(.)))
+
+numeric_area_male <- final_area_male %>%
+  mutate_at(vars(-c(2, 3, 6)), ~ as.numeric(as.character(.)))
+
+```
+
+```{r}
+# Save populated templates to the output folder
+
+output_subvol_fem <- "~/Data/processed/populated_subvol_fem.xlsx"
+write.xlsx(numeric_subvol_fem, output_subvol_fem)
+
+output_subvol_male <- "~/Data/processed/populated_subvol_male.xlsx"
+write.xlsx(numeric_subvol_male, output_subvol_male)
+
+output_thick_fem <- "~/Data/processed/populated_thick_fem.xlsx"
+write.xlsx(numeric_thick_fem, output_thick_fem)
+
+output_thick_male <- "~/Data/processed/populated_thick_male.xlsx"
+write.xlsx(numeric_thick_male, output_thick_male)
+
+output_area_fem <- "~/Data/processed/populated_area_fem.xlsx"
+write.xlsx(numeric_area_fem, output_area_fem)
+
+output_area_male <- "~/Data/processed/populated_area_male.xlsx"
+write.xlsx(numeric_area_male, output_area_male)
+
+# Optional confirmation messages
+print(paste("Saved:", output_subvol_fem))
+print(paste("Saved:", output_subvol_male))
+print(paste("Saved:", output_thick_fem))
+print(paste("Saved:", output_thick_male))
+print(paste("Saved:", output_area_fem))
+print(paste("Saved:", output_area_male))
+```
+
+# References
+
+Bethlehem, R. A. I., Seidlitz, J., White, S. R., et al. (2022). Brain charts for the human lifespan. Nature, 604(7906), 525–533.
+https://doi.org/10.1038/s41586-022-04554-y
